@@ -36,9 +36,9 @@ const userSchema = new mongoose.Schema({
     required: true
   },
 }, { timestamps: true });
-userSchema.index({ email: 1 }); // Unique index for email
+
 userSchema.index({ location: 1, role: 1 }); // Compound index for location/role queries
-userSchema.index({ phone: 1 }); // Unique index for phone
+
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();

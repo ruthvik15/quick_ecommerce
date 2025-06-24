@@ -278,7 +278,10 @@ router.post("/search", async (req, res) => {
 
   try {
     const regex = new RegExp(searchQuery.trim(), "i");
-    const results = await Product.find({ name: regex });
+  const results = await Product.find({ 
+  name: regex, 
+  status: "live" // ✅ Only show live products
+});
 
     return res.render("search-results", {
       user: req.user,
@@ -296,9 +299,11 @@ router.post("/search", async (req, res) => {
 router.get('/search', async (req, res) => {
   const { searchQuery = '', category, sort } = req.query;
 
+
   let query = {
-    name: new RegExp(searchQuery.trim(), 'i')
-  };
+  name: new RegExp(searchQuery.trim(), 'i'),
+  status: "live" // ✅ Only show live products
+};
 
   if (category) {
     query.category = category;
@@ -312,11 +317,13 @@ router.get('/search', async (req, res) => {
   const products = await Product.find(query).sort(sortOption);
 
   res.render('search-results', {
-    products,
-    searchQuery,
-    selectedCategory: category,
-    selectedSort: sort
-  });
+  products,
+  query: searchQuery,              // ✅ Use 'query' instead of 'searchQuery'
+  selectedCategory: category,
+  selectedSort: sort,
+  user: req.user,
+  returnTo: req.originalUrl        // ✅ Optional for add-to-cart redirect
+});
 });
 
 

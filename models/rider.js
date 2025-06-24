@@ -76,7 +76,7 @@ latitude: {
 
 }, { timestamps: true });
 
-riderSchema.index({ email: 1 });
+
 riderSchema.index({ location: 1, vehicle_type: 1 });
 riderSchema.index({ no_of_orders: -1 });
 // Optional: Composite index on assignedSlots (advanced, can be added to RiderSlotAssignment collection)
