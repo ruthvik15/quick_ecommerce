@@ -1,10 +1,19 @@
-// const { createClient } = require("redis");
+const { createClient } = require("redis");
+require("dotenv").config(); // Load env variables
 
-// const redis = createClient();
+const redis = createClient({
+  url: process.env.REDIS_URL ||"redis://localhost:6379"
+});
 
-// redis.on("error", err => console.error("❌ Redis Error:", err));
-// redis.on("connect", () => console.log("✅ Redis connected"));
+redis.on("error", (err) => console.error("❌ Redis Error:", err));
+redis.on("connect", () => console.log("✅ Redis connected"));
 
-// redis.connect(); // Important: returns a Promise
+(async () => {
+  try {
+    await redis.connect();
+  } catch (err) {
+    console.error("❌ Redis connection failed:", err);
+  }
+})();
 
-// module.exports = redis;
+module.exports = redis;

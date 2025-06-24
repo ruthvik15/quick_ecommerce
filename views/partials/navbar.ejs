@@ -5,17 +5,21 @@
     </a>
 
     <div class="ms-auto d-flex align-items-center gap-3">
+        <% if(!user||(user&&user.role==="user")){ %>
+    
       <div class="dropdown me-3">
   <a class="btn btn-outline-dark dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
     <i class="fas fa-map-marker-alt me-1"></i>
     <%= selectedLocation || "Hyderabad" %>
   </a>
+
   <ul class="dropdown-menu">
     <li><a class="dropdown-item" href="/set-location?loc=hyderabad">Hyderabad</a></li>
     <li><a class="dropdown-item" href="/set-location?loc=bengaluru">Bengaluru</a></li>
     <li><a class="dropdown-item" href="/set-location?loc=mumbai">Mumbai</a></li>
     <li><a class="dropdown-item" href="/set-location?loc=delhi">Delhi</a></li>
   </ul>
+  <% } %>
 </div>
 <% if(user){ %>
   <% if (user.role==="user" ) { %>

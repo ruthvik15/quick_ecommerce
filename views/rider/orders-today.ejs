@@ -33,24 +33,27 @@
         <p class="mb-0"><i class="fas fa-clock me-1"></i> Delivery Slot: <strong><%= slot %></strong></p>
         <p class="mb-0"><i class="fas fa-credit-card me-1"></i> Payment: <strong><%=order.payment %></strong></p>
       </div>
-      <div class="col-md-4 text-end">
-        <a href="/trackorders/<%= order._id %>" class="btn btn-info btn-sm mt-2">
-  <i class="fas fa-map-marked-alt me-1"></i> Track Order
-</a>
-        <% if (order.status === 'accepted') { %>
-          <form method="POST" action="/rider/orders/out-for-delivery">
-            <input type="hidden" name="orderId" value="<%= order._id %>">
-            <button class="btn btn-warning btn-sm">Mark as Picked Up</button>
-          </form>
-        <% } else if (order.status === 'out-for-delivery') { %>
-          <form method="POST" action="/rider/orders/complete">
-            <input type="hidden" name="orderId" value="<%= order._id %>">
-            <button class="btn btn-success btn-sm">Mark as Delivered</button>
-          </form>
-        <% } else if (order.status === 'delivered') { %>
-          <span class="badge bg-success">Delivered</span>
-        <% } %>
-      </div>
+      <div class="col-md-4 text-md-end text-start mt-3 mt-md-0">
+  <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+    <a href="/trackorders/<%= order._id %>" class="btn btn-info btn-sm">
+      <i class="fas fa-map-marked-alt me-1"></i> Track Order
+    </a>
+
+    <% if (order.status === 'accepted') { %>
+      <form method="POST" action="/rider/orders/out-for-delivery" class="d-inline">
+        <input type="hidden" name="orderId" value="<%= order._id %>">
+        <button class="btn btn-warning btn-sm">Mark as Picked Up</button>
+      </form>
+    <% } else if (order.status === 'out-for-delivery') { %>
+      <form method="POST" action="/rider/orders/complete" class="d-inline">
+        <input type="hidden" name="orderId" value="<%= order._id %>">
+        <button class="btn btn-success btn-sm">Mark as Delivered</button>
+      </form>
+    <% } else if (order.status === 'delivered') { %>
+      <span class="badge bg-success align-middle mt-2">Delivered</span>
+    <% } %>
+  </div>
+</div>
     </div>
   </div>
 </div>

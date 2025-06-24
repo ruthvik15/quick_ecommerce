@@ -14,7 +14,6 @@ const productroute=require("./routes/product")
 const { checkcookie } = require("./middleware/auth");
 const redis = require("redis");
 const app = express();
-console.log("✅ DB URI:", process.env.MONGO_DB_URI);
 mongoose.connect(process.env.MONGO_DB_URI).then((e)=>{console.log("connected")})
 
 // Middleware
@@ -73,7 +72,7 @@ app.use("/checkout",checkoutroute);
 app.use('/seller', sellerRoutes); 
 app.use("/product",productroute)
 
-
+require('./utils/locationsync');
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
