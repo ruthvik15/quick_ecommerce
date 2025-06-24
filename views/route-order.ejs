@@ -36,38 +36,61 @@
 
     <!-- Map Section -->
     <div id="map"></div>
+<div class="container mt-5">
+  <div class="row row-cols-1 row-cols-md-3 g-4">
 
-    <!-- Order & Rider Details -->
-    <div class="row g-4">
-      <div class="col-md-6">
-        <div class="card shadow-sm">
-          <div class="card-header bg-primary text-white">Order Details</div>
-          <div class="card-body">
-            <p><strong>Product:</strong> <%= product.name %></p>
-            <% if(!order.paid){ %>
-            <p><strong>Payment status: COD-</strong> ₹<%= order.total %></p>
-            <% } else{%>
-              <p><strong>Payment status: PREPAID-</strong> ₹<%= order.total %></p>
-              <% } %>
-            <p><strong>Slot:</strong> <%= order.deliveryDate %> - <%= order.deliverySlot %></p>
-            <p><strong>Status:</strong> <span class="badge bg-success"><%= order.status %></span></p>
-          </div>
+    <!-- 🧑‍💼 User Info -->
+    <div class="col">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-success text-white">
+          <i class="fas fa-user me-1"></i> User Info
         </div>
-      </div>
-
-      <div class="col-md-6">
-        <div class="card shadow-sm">
-          <div class="card-header bg-secondary text-white">Rider Info</div>
-          <div class="card-body">
-            <p><strong>Name:</strong> <%= rider.name %></p>
-            <p><strong>Phone:</strong> <%= rider.phone %></p>
-            <p><strong>Vehicle:</strong> <%= rider.vehicle_type %></p>
-            <p><strong>Number Plate:</strong> <%= rider.number_plate %></p>
-          </div>
+        <div class="card-body">
+        
+          <p><strong>Name:</strong> <%= order.user_id.name %></p>
+          <p><strong>Phone:</strong> <%= order.ph_number %></p>
+          <p><strong>Address:</strong> <%= order.address %></p>
+          <p><strong>Location:</strong> <%= order.user_id.location %></p>
         </div>
       </div>
     </div>
+
+    <!-- 📦 Order Details -->
+    <div class="col">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-primary text-white">
+          <i class="fas fa-box-open me-1"></i> Order Details
+        </div>
+        <div class="card-body">
+          <p><strong>Product:</strong> <%= product.name %></p>
+          <% if (!order.paid) { %>
+            <p><strong>Payment:</strong> <span class="badge bg-warning text-dark">COD - ₹<%= order.total %></span></p>
+          <% } else { %>
+            <p><strong>Payment:</strong> <span class="badge bg-info text-dark">Prepaid - ₹<%= order.total %></span></p>
+          <% } %>
+          <p><strong>Slot:</strong> <%= order.deliveryDate.toDateString() %> - <%= order.deliverySlot %></p>
+          <p><strong>Status:</strong> <span class="badge bg-success text-light"><%= order.status %></span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🛵 Rider Info -->
+    <div class="col">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-secondary text-white">
+          <i class="fas fa-motorcycle me-1"></i> Rider Info
+        </div>
+        <div class="card-body">
+          <p><strong>Name:</strong> <%= rider.name %></p>
+          <p><strong>Phone:</strong> <%= rider.phone %></p>
+          <p><strong>Vehicle:</strong> <%= rider.vehicle_type %></p>
+          <p><strong>Number Plate:</strong> <%= rider.number_plate %></p>
+        </div>
+      </div>
+    </div>
+
   </div>
+</div>
 
 
  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

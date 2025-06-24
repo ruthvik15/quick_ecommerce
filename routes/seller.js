@@ -7,12 +7,11 @@ const multer = require("multer");
 const upload = require("../utils/s3Uploader");
 // ✅ Seller Dashboard
 router.get('/dashboard', async (req, res) => {
-  if (!req.user || req.user.role !== 'seller') return res.redirect('/signin');
+  if (!req.user || req.user.role !== 'seller') return res.redirect('/login');
 
   try {
     const products = await Product.find({ seller: req.user._id });
-    console.log(products)
-
+  
     // Get total sold per product
     const soldCounts = await Order.aggregate([
       { $match: { status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] } } },
@@ -38,7 +37,7 @@ router.get('/dashboard', async (req, res) => {
       };
     });
 
-    res.render('seller-dashboard', { user: req.user, products: dashboardProducts });
+    res.render('seller/dashboard', { user: req.user, products: dashboardProducts });
   } catch (error) {
     console.error('Error loading seller dashboard:', error);
     res.status(500).send('Error loading dashboard.');
@@ -146,7 +145,7 @@ router.post('/product/:id/quantity', async (req, res) => {
 //     res.status(500).send("Internal Server Error");
 //   }
 // });
-router.get("/add-product", (req, res) => res.render("productadd"));
+router.get("/add-product", (req, res) => res.render("seller/productadd"));
 
 // Upload product with image to S3
 router.post("/productadd", upload.single("image"), async (req, res) => {

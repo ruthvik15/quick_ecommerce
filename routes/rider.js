@@ -8,22 +8,7 @@ const Cart =require("../models/cart");
 const Order = require("../models/order");
 const Rider=require("../models/rider")
 const redis = require("../utils/redisClient");
-router.get("/orders", async (req, res) => {
-  if (req.user.role !== "rider") return res.status(403).send("Access denied");
 
-  const riderLocation = req.user.location;
-
-  // Get all unassigned orders from same location
-  const orders = await Order.find({
-    location: riderLocation,
-    status: "confirmed",
-    rider_id: null
-  })
-    .populate("user_id") // To access user details
-    .sort({ deliveryDate: 1 });
-
-  res.render("rider-orders", { user: req.user, orders });
-});
 router.post("/orders/accept", async (req, res) => {
   const { orderId } = req.body;
   const order = await Order.findById(orderId);
@@ -56,7 +41,7 @@ router.post("/orders/reject", async (req, res) => {
 
 
 router.get("/dashboard", async (req, res) => {
-  if (!req.user) return res.redirect("/signin");
+  if (!req.user) return res.redirect("/login");
 
   const rider = await Rider.findById(req.user._id);
 
@@ -86,7 +71,7 @@ router.get("/dashboard", async (req, res) => {
      deliveryDate: { $gte: today }
   });
 
-  res.render("rider-dashboard", {
+  res.render("rider/dashboard", {
     rider,
     todaysOrderCount,
     orderRequestCount
@@ -135,61 +120,7 @@ router.post("/signup", async (req, res) => {
     res.status(500).send("Server error. Try again.");
   }
 });
-router.post("/signin", async (req, res) => {
-  try {
-    const {  email, password, } = req.body;
-    const role="rider"
-    // Basic validation
-    if ( !email || !password ) {
-      return res.status(400).send("All fields are required.");
-    }
 
-    // Check for existing rider
-    const existing = await Rider.findOne({ email });
-    if (!existing) {
-      return res.status(400).send("Rider with this email do not exists.");
-    }
-
-  
-    // Generate JWT token
-    const token = await Rider.matchPassword(email, password);
-
-    // Set token in cookie
-    res.cookie("token", token).redirect("/rider/dashboard");
-  } catch (err) {
-    console.error("Rider signin failed:", err);
-    res.status(500).send("Server error. Try again.");
-  }
-});
-// router.post("/:id/location", async (req, res) => {
-//   try {
-//     const { latitude, longitude } = req.body;
-//     const riderId = req.params.id;
-
-//     if (!latitude || !longitude) {
-//       return res.status(400).json({ error: "Latitude and longitude required" });
-//     }
-
-//     const rider = await Rider.findByIdAndUpdate(riderId, {
-//       latitude,
-//       longitude,
-//     }, { new: true });
-
-//     if (!rider) return res.status(404).json({ error: "Rider not found" });
-
-//     // ✅ Save to Redis using GEOADD
-//     await redis.geoAdd("rider_locations", {
-//       longitude: parseFloat(longitude),
-//       latitude: parseFloat(latitude),
-//       member: riderId
-//     });
-
-//     res.json({ message: "Location updated", rider });
-//   } catch (err) {
-//     console.error("Location update failed:", err);
-//     res.status(500).json({ error: "Failed to update location" });
-//   }
-// });
 router.post("/:id/location", async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
@@ -282,7 +213,7 @@ router.get("/orders/pending", async (req, res) => {
       );
     });
 
-    res.render("rider-order-pending", {
+    res.render("rider/order-pending", {
       user: req.user,
       groupedOrders,
       status: "confirmed"
@@ -311,9 +242,7 @@ today.setHours(0, 0, 0, 0); // Set to 00:00:00.000
 
 const tomorrow = new Date(today);
 tomorrow.setDate(tomorrow.getDate() + 1);
-    console.log(today)
-    console.log(tomorrow)
-
+    
     // Fetch only accepted orders for the logged-in rider and today’s delivery
     const orders = await Order.find({
 status: { $in: ["accepted", "out-for-delivery", "delivered"] },
@@ -329,7 +258,8 @@ status: { $in: ["accepted", "out-for-delivery", "delivered"] },
     orders.forEach(order => {
       const slot = order.deliverySlot;
       if (!groupedSlots[slot]) groupedSlots[slot] = [];
-      groupedSlots[slot].push({
+      
+         groupedSlots[slot].push({
         _id: order._id,
         deliveryDate: order.deliveryDate,
         deliverySlot: slot,
@@ -337,7 +267,8 @@ status: { $in: ["accepted", "out-for-delivery", "delivered"] },
         userName: order.user_id.name,
         userLocation: order.user_id.location,
         productName: order.product_id.name,
-        status: order.status
+        status: order.status,
+        payment: order.paid ? "prepaid" : "cod"
       });
     });
 
@@ -349,7 +280,7 @@ status: { $in: ["accepted", "out-for-delivery", "delivered"] },
         return acc;
       }, {});
 
-    res.render("rider-orders-today", {
+    res.render("rider/orders-today", {
       user: req.user,
       groupedSlots: sortedGroupedSlots
     });
@@ -417,7 +348,7 @@ router.get("/orders/accepted", async (req, res) => {
       });
     });
 
-    res.render("rider-orders-active", {
+    res.render("rider/orders-active", {
       user: req.user,
       groupedOrders: grouped
     });
@@ -455,7 +386,7 @@ router.get("/orders/completed", async (req, res) => {
       });
     });
 
-    res.render("rider-orders-completed", {
+    res.render("rider/orders-completed", {
       user: req.user,
       groupedOrders: grouped
     });

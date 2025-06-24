@@ -139,8 +139,6 @@
 
     map.on('click', function (e) {
       const { lat, lng } = e.latlng;
-      console.log(lat);
-      console.log(lng);
       marker.setLatLng([lat, lng]);
       document.getElementById("latitude").value = lat;
       document.getElementById("longitude").value = lng;

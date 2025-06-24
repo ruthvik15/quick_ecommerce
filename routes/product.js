@@ -16,7 +16,7 @@ router.get('/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate('seller');
     if (!product) return res.status(404).send('Product not found');
-    console.log("product",product);
+
     // Fetch all reviews for this product
     const reviews = await Review.find({ product_id: product._id })
       .populate('user_id')

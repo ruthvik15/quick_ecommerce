@@ -26,8 +26,15 @@ router.get("/set-location", (req, res) => {
 });
 
 router.get("/", async (req, res) => {
+    if (req.user) {
+    if (req.user.role === "seller") {
+      return res.redirect("/seller/dashboard");
+    } else if (req.user.role === "rider") {
+      return res.redirect("/rider/dashboard");
+    }
+  }
   const selectedLocation = req.cookies.selectedLocation || req.user?.location || "hyderabad";
-
+  
   const { category, sort } = req.query;
   const filter = { location: selectedLocation };
   const sortOption = {};
@@ -106,35 +113,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// router.post("/signup", async (req, res) => {
-//   const { name, email, password, phone, location, role, address } = req.body;
-
-//   if (!name || !email || !password || !phone || !location || !role) {
-//     return res.status(400).send("All fields are required.");
-//   }
-
-//   try {
-//     if (role === "rider") {
-//         return res.render("rider-signup", {
-//     rider: { name, email, password, phone, location, role }
-//   });
-//     }
-
-//     // For user or seller
-//     const user = new User({ name, email, password, phone, location, role, address });
-//     await user.save();
-
-//     const token = await User.matchPassword(email, password);
-//     res.clearCookie("selectedLocation"); 
-//     return res.cookie("token", token).redirect("/");
-//   } catch (err) {
-//     console.error("Signup error:", err);
-//     if (err.code === 11000) {
-//       return res.status(400).send("Email or phone already exists.");
-//     }
-//     res.status(500).send("Server error");
-//   }
-// });
 router.post("/signup", async (req, res) => {
   const { name, email, password, phone, location, role, address } = req.body;
 
@@ -144,7 +122,7 @@ router.post("/signup", async (req, res) => {
 
   try {
     if (role === "rider") {
-      return res.render("rider-signup", {
+      return res.render("rider/signup", {
         rider: { name, email, password, phone, location, role }
       });
     }
@@ -262,51 +240,6 @@ router.post("/orders/cancel/:id", async (req, res) => {
   }
 });
 
-// router.get("/trackorders/:orderId", async (req, res) => {
-//   try {
-//     const orderId = req.params.orderId;
-
-//     const order = await Order.findById(orderId)
-//       .populate("rider_id")
-//       .populate("user_id")
-//       .populate("product_id");
-
-//     if (!order || !order.rider_id || !order.user_id) {
-//       return res.status(404).send("Order or delivery information not found");
-//     }
-
-//     const riderId = order.rider_id._id.toString();
-
-//     // ✅ Try to get latest location from Redis
-//     const riderGeo = await redis.geoPos("rider_locations", riderId);
-
-//     let riderCoords = {
-//       lat: order.rider_id.latitude,
-//       lng: order.rider_id.longitude
-//     };
-
-//     if (riderGeo && riderGeo[0]) {
-//       riderCoords = {
-//         lng: parseFloat(riderGeo[0][0]),
-//         lat: parseFloat(riderGeo[0][1])
-//       };
-//     }
-
-//     res.render("route-order", {
-//       user: req.user,
-//       order,
-//       rider: order.rider_id,
-//       product: order.product_id,
-//       userCoords: { lat: order.lat, lng: order.lng },
-//       riderCoords
-//     });
-
-//   } catch (err) {
-//     console.error("Tracking error:", err);
-//     res.status(500).send("Error loading order tracking");
-//   }
-// });
-
 
 router.get("/trackorders/:orderId", async (req, res) => {
   try {
@@ -336,51 +269,6 @@ router.get("/trackorders/:orderId", async (req, res) => {
   }
 });
 
-// router.get("/search-suggestions", async (req, res) => {
-//   try {
-//     const query = req.query.q?.trim();
-//     if (!query || query.length < 2) return res.json([]);
-
-//     const regex = new RegExp(query, "i"); // case-insensitive
-//     const suggestions = await Product.find({ name: regex })
-//       .limit(10)
-//       .select("name");
-
-//     const names = suggestions.map(item => item.name);
-//     res.json(names);
-//   } catch (err) {
-//     console.error("Search error:", err);
-//     res.status(500).json({ error: "Search failed" });
-//   }
-// });
-// function escapeRegex(text) {
-//   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-// }
-
-// router.post("/search", async (req, res) => {
-//   const { searchQuery } = req.body;
-
-//   if (!searchQuery || searchQuery.trim() === "") {
-//     return res.redirect("/");
-//   }
-
-//   try {
-//     const safeQuery = escapeRegex(searchQuery.trim());
-//     const regex = new RegExp(safeQuery, "i"); // case-insensitive
-
-//     const results = await Product.find({ name: regex });
-
-//     return res.render("search-results", {
-//       user: req.user,
-//       query: searchQuery,
-//       products: results,
-//       returnTo: `/search?q=${encodeURIComponent(searchQuery)}`
-//     });
-//   } catch (err) {
-//     console.error("Search failed:", err);
-//     res.status(500).send("Server error");
-//   }
-// });
 router.post("/search", async (req, res) => {
   const { searchQuery } = req.body;
 
