@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo
+    container_name: quickcart-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  app:
+    build: .
+    container_name: quickcart-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongo
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    command: ["npm", "start"]
+
+volumes:
+  mongo-data:

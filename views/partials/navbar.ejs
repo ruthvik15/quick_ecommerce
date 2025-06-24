@@ -1,0 +1,59 @@
+<header>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light px-4">
+    <a class="navbar-brand" href="/">
+      <i class="fas fa-bolt text-warning"></i> <strong>QuickCart</strong>
+    </a>
+
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <div class="dropdown me-3">
+  <a class="btn btn-outline-dark dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+    <i class="fas fa-map-marker-alt me-1"></i>
+    <%= selectedLocation || "Hyderabad" %>
+  </a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="/set-location?loc=hyderabad">Hyderabad</a></li>
+    <li><a class="dropdown-item" href="/set-location?loc=bengaluru">Bengaluru</a></li>
+    <li><a class="dropdown-item" href="/set-location?loc=mumbai">Mumbai</a></li>
+    <li><a class="dropdown-item" href="/set-location?loc=delhi">Delhi</a></li>
+  </ul>
+</div>
+<% if(user){ %>
+  <% if (user.role==="user" ) { %>
+    <a href="/cart" class="btn btn-outline-secondary position-relative">
+      <i class="fas fa-shopping-cart"></i> Cart
+      <% if (cartItemCount> 0) { %>
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+          <%= cartItemCount %>
+        </span>
+        <% } %>
+    </a>
+    <% } %>
+
+
+    <% if (user.role==="seller" ) { %>
+        <a href="/seller/add-product" class="btn btn-outline-success">Add Product</a>
+    <% } %>
+
+          <div class="dropdown">
+            <a class="d-flex align-items-center text-decoration-none dropdown-toggle" href="#"
+              data-bs-toggle="dropdown">
+              <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User" class="rounded-circle me-2"
+                width="32">
+              <strong>
+                <%= user.name %>
+              </strong>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="/trackorders"><i class="fas fa-shopping-bag me-2"></i>Your Orders</a></li>
+              <li><a class="dropdown-item" href="/logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            </ul>
+          </div>
+ 
+
+    <% }else { %>
+              <a href="/login" class="btn btn-outline-primary">Login</a>
+              <a href="/signup" class="btn btn-primary">Sign Up</a>
+    <% } %>
+  </div>
+  </nav>
+  </header>

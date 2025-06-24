@@ -1,0 +1,14 @@
+# Node modules
+node_modules/
+
+# dotenv
+.env
+
+# Logs
+logs/
+*.log
+
+# Docker
+*.pid
+*.sock
+docker-data/

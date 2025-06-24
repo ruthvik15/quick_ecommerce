@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickCart - Your Instant Shopping Solution</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+
+
+</head>
+<body>
+    <%- include('./partials/header') %>
+    <%- include('./partials/navbar', { user }) %>
+    <%- include('./partials/search') %>
+    <%- include('./index',{user}) %>
+  <script>
+  const searchInput = document.getElementById("searchInput");
+  const suggestionsBox = document.getElementById("suggestions");
+
+  searchInput.addEventListener("input", async () => {
+    const query = searchInput.value.trim();
+
+    if (query.length < 2) {
+      suggestionsBox.innerHTML = "";
+      return;
+    }
+
+    try {
+      const res = await fetch(`/search-suggestions?q=${encodeURIComponent(query)}`);
+      const names = await res.json();
+
+      if (!names.length) {
+        suggestionsBox.innerHTML = "";
+        return;
+      }
+
+      suggestionsBox.innerHTML = names.map(name =>
+        `<li class="list-group-item list-group-item-action suggestion-item" style="cursor:pointer">${name}</li>`
+      ).join("");
+    } catch (err) {
+      console.error("Suggestion fetch failed", err);
+    }
+  });
+
+  // Handle click on suggestion
+  suggestionsBox.addEventListener("click", e => {
+    if (e.target.classList.contains("suggestion-item")) {
+      searchInput.value = e.target.textContent;
+      suggestionsBox.innerHTML = "";
+    }
+  });
+
+  // Optional: hide suggestions when clicking elsewhere
+document.addEventListener('click', e => {
+  if (
+    !e.target.closest('#searchInput') &&
+    !e.target.closest('#suggestions')
+  ) {
+    suggestionsBox.innerHTML = '';
+  }
+});
+
+</script>
+
+
+</body>
+</html>

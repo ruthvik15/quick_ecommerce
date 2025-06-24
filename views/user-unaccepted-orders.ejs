@@ -1,0 +1,45 @@
+<%- include('./partials/header') %>
+<%- include('./partials/navbar', { user }) %>
+
+<div class="container py-5">
+  <h3 class="mb-4 text-danger">Orders Missed Their Slot</h3>
+
+  <% if (unacceptedOrders.length === 0) { %>
+    <div class="alert alert-info">No missed or unaccepted orders found.</div>
+  <% } else { %>
+    <% unacceptedOrders.forEach(order => { %>
+      <div class="card mb-3 shadow-sm">
+        <div class="card-body">
+
+          <h5 class="card-title"><%= order.product_id.name %></h5>
+          <p class="mb-1">Delivery Date: <%= new Date(order.deliveryDate).toDateString() %></p>
+          <p class="mb-1">Delivery Slot: <%= order.deliverySlot %></p>
+          <p class="mb-3 text-danger">No rider has accepted your order yet.</p>
+
+          <!-- ✅ Controls in one row -->
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <!-- Update Slot Form -->
+            <form action="/rider/orders/update-slot" method="POST" class="d-flex align-items-center gap-2">
+              <input type="hidden" name="orderId" value="<%= order._id %>">
+              <input type="date" name="newDate" required class="form-control form-control-sm" style="width: 180px;">
+              <select name="newSlot" class="form-select form-select-sm" style="width: 120px;" required>
+                <option value="10-12">10-12</option>
+                <option value="12-2">12-2</option>
+                <option value="2-4">2-4</option>
+                <option value="4-6">4-6</option>
+              </select>
+              <button type="submit" class="btn btn-warning btn-sm">Update Slot</button>
+            </form>
+
+            <!-- Cancel Order Form -->
+            <form action="/orders/cancel" method="POST">
+              <input type="hidden" name="orderId" value="<%= order._id %>">
+              <button type="submit" class="btn btn-outline-danger btn-sm">Cancel</button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+</div>

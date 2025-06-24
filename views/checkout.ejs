@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QuickCart - Your Instant Shopping Solution</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+</head>
+<body>
+  <%- include('./partials/header') %>
+  <%- include('./partials/navbar', { user }) %>
+
+  <div class="container py-5">
+    <h2 class="mb-4">Checkout</h2>
+
+    <form id="checkoutForm">
+      <!-- User Info -->
+      <div class="card mb-4">
+        <div class="card-header bg-light"><h5 class="mb-0">Delivery Details</h5></div>
+        <div class="card-body">
+          <p><strong>Name:</strong> <%= user.name %></p>
+          <div class="mb-3">
+              <label for="address" class="form-label"><strong>Address:</strong></label>
+              <textarea id="address" name="address" class="form-control" rows="3" required><%= user.address %></textarea>
+       </div>
+          <div class="mb-3">
+          <label for="phone" class="form-label"><strong>Phone:</strong></label>
+          <input type="tel" id="phone" name="phone" class="form-control" value="<%= user.phone %>" required>
+        </div>
+          <p><strong>Location:</strong> <%= user.location %></p>
+        </div>
+      </div>
+
+      <!-- Order Preview -->
+      <div class="card mb-4">
+        <div class="card-header bg-light"><h5 class="mb-0">Order Preview</h5></div>
+        <div class="card-body">
+          <% let total = 0; %>
+          <ul class="list-group">
+            <% cart.items.forEach(item => { %>
+              <li class="list-group-item d-flex justify-content-between">
+                <span><%= item.product.name %> × <%= item.quantity %></span>
+                <span>₹<%= item.product.price * item.quantity %></span>
+              </li>
+              <% total += item.product.price * item.quantity; %>
+            <% }); %>
+            <li class="list-group-item d-flex justify-content-between fw-bold">
+              <span>Total</span>
+              <span>₹<%= total %></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Delivery Date & Slot -->
+      <div class="card mb-4">
+        <div class="card-header bg-light"><h5 class="mb-0">Choose Delivery Date & Time Slot</h5></div>
+        <div class="card-body row g-3">
+          <div class="col-md-6">
+            <label for="deliveryDate" class="form-label">Delivery Date</label>
+            <select name="deliveryDate" id="deliveryDate" class="form-select" required>
+              <% const today = new Date(); %>
+              <% for (let i = 0; i <= 30; i++) {
+                const d = new Date(today);
+                d.setDate(d.getDate() + i);
+                const formatted = d.toISOString().split("T")[0];
+              %>
+                <option value="<%= formatted %>"><%= formatted %></option>
+              <% } %>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Time Slot</label>
+            <div id="slotOptions" class="d-flex flex-wrap gap-3">
+              <% const slots = ["10-12", "12-2", "2-4", "4-6"]; %>
+              <% slots.forEach(slot => { %>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="deliverySlot" value="<%= slot %>" required>
+                  <label class="form-check-label"><%= slot %></label>
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Location Picker -->
+      <input type="hidden" name="latitude" id="latitude" required />
+      <input type="hidden" name="longitude" id="longitude" required />
+      <div class="mb-4">
+        <label class="form-label">Select Delivery Location</label>
+        <div id="map" style="height: 300px; border: 1px solid #ccc;"></div>
+        <small class="text-muted">Click on the map to select delivery location</small>
+      </div>
+
+      <!-- Payment Method -->
+      <div class="card mb-4">
+        <div class="card-header bg-light"><h5 class="mb-0">Select Payment Method</h5></div>
+        <div class="card-body">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="paymentMethod" value="cod" checked>
+            <label class="form-check-label">Cash on Delivery</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="paymentMethod" value="online">
+            <label class="form-check-label">Pay Online (Razorpay)</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-end">
+        <button type="submit" class="btn btn-success" id="checkoutBtn">Confirm & Place Order</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <script>
+    const cityCoords = {
+      hyderabad: { lat: 17.385044, lng: 78.486671 },
+      bengaluru: { lat: 12.971599, lng: 77.594566 },
+      mumbai: { lat: 19.076090, lng: 72.877426 },
+      delhi: { lat: 28.613939, lng: 77.209023 }
+    };
+
+    const defaultLocation = cityCoords["<%= cartLocation %>"] || cityCoords.hyderabad;
+    const map = L.map('map').setView(defaultLocation, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const marker = L.marker(defaultLocation, { draggable: true }).addTo(map);
+
+    document.getElementById("latitude").value = defaultLocation.lat;
+    document.getElementById("longitude").value = defaultLocation.lng;
+
+    map.on('click', function (e) {
+      const { lat, lng } = e.latlng;
+      console.log(lat);
+      console.log(lng);
+      marker.setLatLng([lat, lng]);
+      document.getElementById("latitude").value = lat;
+      document.getElementById("longitude").value = lng;
+    });
+
+    // Disable old slots for today
+    const deliveryDateSelect = document.getElementById('deliveryDate');
+    const slotInputs = document.querySelectorAll('input[name="deliverySlot"]');
+    const slotHourMap = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
+
+    function updateSlotAvailability() {
+      const selectedDate = new Date(deliveryDateSelect.value);
+      const now = new Date();
+      const isToday = selectedDate.toDateString() === now.toDateString();
+
+      slotInputs.forEach(input => {
+        const slotHour = slotHourMap[input.value];
+        input.disabled = isToday && slotHour <= now.getHours();
+        if (input.disabled) input.checked = false;
+      });
+    }
+
+    deliveryDateSelect.addEventListener('change', updateSlotAvailability);
+    window.addEventListener('DOMContentLoaded', updateSlotAvailability);
+
+    // Checkout submission
+    const form = document.getElementById("checkoutForm");
+
+    form.addEventListener("submit", async function (e) {
+  e.preventDefault(); // prevent default for both COD and Razorpay
+
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+  const paymentMethod = data.paymentMethod;
+
+  const res = await fetch("/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+  const result = await res.json();
+
+  if (paymentMethod === "online") {
+    if (result.razorpayOrderId) {
+      const options = {
+        key: result.key,
+        amount: result.amount,
+        currency: "INR",
+        name: "QuickCart",
+        description: "Order Payment",
+        order_id: result.razorpayOrderId,
+        handler: async function (response) {
+          const verifyRes = await fetch("/checkout/verify-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...response,
+              deliveryDate: data.deliveryDate,
+              deliverySlot: data.deliverySlot,
+              latitude: data.latitude,
+              longitude: data.longitude, 
+            })
+          });
+          const resJson = await verifyRes.json();
+          if (resJson.success) {
+            window.location.href = "/checkout/orders/success";
+          } else {
+            alert("Payment verification failed");
+          }
+        },
+        theme: { color: "#3399cc" }
+      };
+      const rzp = new Razorpay(options);
+      rzp.open();
+    } else {
+      alert(result.error || "Unable to create Razorpay order");
+    }
+  } else if (paymentMethod === "cod") {
+    if (result.success && result.redirect) {
+      window.location.href = result.redirect;
+    } else {
+      alert(result.error || "Unable to place COD order");
+    }
+  }
+});
+
+  </script>
+</body>
+</html>

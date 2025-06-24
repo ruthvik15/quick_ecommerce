@@ -1,0 +1,44 @@
+<%- include('./partials/header') %>
+<%- include('./partials/navbar', { user }) %>
+<%- include('./partials/search') %>
+<div class="container py-5">
+  <h3>Search Results for "<%= query %>"</h3>
+
+  <% if (products.length === 0) { %>
+    <div class="alert alert-warning mt-4">No products found matching your search.</div>
+  <% } else { %>
+    <div class="row row-cols-1 row-cols-md-3 g-4 mt-4">
+      <% products.forEach(product => { %>
+        <div class="col">
+          <div class="card h-100 shadow-sm">
+            <img src="<%= product.image %>" class="card-img-top" alt="<%= product.name %>" style="height: 200px; object-fit: cover;">
+            <div class="card-body d-flex flex-column justify-content-between">
+              <div>
+                <h5 class="card-title"><%= product.name %></h5>
+                <p class="card-text text-muted"><%= product.description %></p>
+                <p class="fw-bold text-primary">₹<%= product.price.toLocaleString('en-IN') %></p>
+              </div>
+
+             <div class="mt-3 d-flex gap-2">
+  <form class="flex-grow-1">
+    <button class="btn btn-outline-secondary btn-sm w-100" type="button">
+      <i class="fas fa-heart"></i> Wishlist
+    </button>
+  </form>
+
+  <form action="/cart/add" method="POST" class="flex-grow-1">
+    <input type="hidden" name="productId" value="<%= product._id %>">
+    <input type="hidden" name="returnTo" value="<%= returnTo %>">
+    <button class="btn btn-primary btn-sm w-100" type="submit">
+      <i class="fas fa-shopping-cart"></i> Add to Cart
+    </button>
+  </form>
+</div>
+              
+            </div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+</div>
