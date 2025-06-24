@@ -225,56 +225,86 @@ const trackSingleOrder = async (req, res) => {
     res.status(500).send("Error loading order tracking");
   }
 };
+function escapeRegex(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+}
 
-const searchProducts = async (req, res) => {
-  const { searchQuery = "", category = "", sort = "" } = req.query;
-  const key = `search:${searchQuery}:${category}:${sort}`;
-  const cached = await getCache(key);
-  if (cached) {
-    return res.render("search-results", {
-      ...cached,
-      user: req.user,
-      returnTo: req.originalUrl,
-    });
+// 🔍 GET /search-suggestions
+const searchSuggestions = async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim();
+    if (!q) return res.json([]);
+
+    const docs = await Product
+      .find({ name: new RegExp("^" + q, "i") })
+      .limit(5)
+      .select("name -_id");
+
+    const names = docs.map(d => d.name);
+    res.json(names);
+  } catch (err) {
+    console.error("Suggestions error:", err);
+    res.status(500).json({ error: "Failed to fetch suggestions" });
+  }
+};
+
+// 🔎 POST /search (homepage search box)
+const handleSearchPost = async (req, res) => {
+  const { searchQuery } = req.body;
+
+  if (!searchQuery || searchQuery.trim() === "") {
+    return res.redirect("/");
   }
 
-  let query = { name: new RegExp(searchQuery.trim(), "i"), status: "live" };
-  if (category) query.category = category;
+  try {
+    const safeQuery = escapeRegex(searchQuery.trim());
+    const regex = new RegExp(safeQuery, "i");
+    const results = await Product.find({ name: regex });
+
+    return res.render("search-results", {
+      user: req.user,
+      query: searchQuery,
+      products: results,
+      returnTo: `/search?searchQuery=${encodeURIComponent(searchQuery)}`,
+      selectedCategory: "",
+      selectedSort: ""
+    });
+  } catch (err) {
+    console.error("Search failed:", err);
+    res.status(500).send("Server error");
+  }
+};
+
+// 🔎 GET /search (search results + filter/sort)
+const handleSearchGet = async (req, res) => {
+  const { searchQuery = "", category, sort } = req.query;
+
+  const safeQuery = escapeRegex(searchQuery.trim());
+  let query = { name: new RegExp(safeQuery, "i") };
+
+  if (category) {
+    query.category = category;
+  }
 
   let sortOption = {};
   if (sort === "low-high") sortOption.price = 1;
   else if (sort === "high-low") sortOption.price = -1;
   else if (sort === "newest") sortOption.createdAt = -1;
 
-  const products = await Product.find(query).sort(sortOption);
-  const resultData = {
-    products,
-    query: searchQuery,
-    selectedCategory: category,
-    selectedSort: sort,
-  };
-
-  await setCache(key, resultData, 300);
-  res.render("search-results", {
-    ...resultData,
-    user: req.user,
-    returnTo: req.originalUrl,
-  });
-};
-
-const searchSuggestions = async (req, res) => {
-  const q = (req.query.q || "").trim();
-  if (!q) return res.json([]);
-
-  const cacheKey = `search-suggestions:${q}`;
-  const cached = await getCache(cacheKey);
-  if (cached) return res.json(cached);
-
-  const docs = await Product.find({ name: new RegExp("^" + q, "i") }).limit(5).select("name -_id");
-  const names = docs.map((d) => d.name);
-
-  await setCache(cacheKey, names, 600);
-  res.json(names);
+  try {
+    const products = await Product.find(query).sort(sortOption);
+    res.render("search-results", {
+      user: req.user,
+      products,
+      query: searchQuery,
+      selectedCategory: category || "",
+      selectedSort: sort || "",
+      returnTo: req.originalUrl
+    });
+  } catch (err) {
+    console.error("GET Search failed:", err);
+    res.status(500).send("Server error");
+  }
 };
 
 module.exports = {
@@ -286,6 +316,10 @@ module.exports = {
   trackOrders,
   cancelOrder,
   trackSingleOrder,
-  searchProducts,
   searchSuggestions,
+  handleSearchPost,
+  handleSearchGet,
+
+  searchSuggestions,
+  
 };
