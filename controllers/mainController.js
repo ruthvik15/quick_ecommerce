@@ -66,6 +66,13 @@ const renderHome = async (req, res) => {
     selectedSort: sort || "",
   });
 };
+const getLogin = (req, res) => {
+  res.render("login");
+};
+
+const getSignup = (req, res) => {
+  res.render("signup");
+};
 
 const login = async (req, res) => {
   const { email, password, role } = req.body;
@@ -319,7 +326,8 @@ module.exports = {
   searchSuggestions,
   handleSearchPost,
   handleSearchGet,
-
+getLogin,
+  getSignup,
   searchSuggestions,
   
 };

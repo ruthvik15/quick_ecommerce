@@ -45,7 +45,7 @@
             </form>
 
             <!-- Cancel Order Form -->
-            <form action="/orders/cancel" method="POST">
+            <form action="/orders/cancel/<%=order._id %>" method="POST">
               <input type="hidden" name="orderId" value="<%= order._id %>">
               <button type="submit" class="btn btn-outline-danger btn-sm">Cancel</button>
             </form>

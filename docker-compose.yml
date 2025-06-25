@@ -1,25 +1,25 @@
-version: '3.8'
+# # version: '3.8'
 
-services:
-  app:
-    build: .
-    container_name: quickcart-app
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    depends_on:
-      redis:
-        condition: service_healthy  # waits for Redis healthcheck
-    command: ["npm", "start"]
+# services:
+#   app:
+#     build: .
+#     container_name: quickcart-app
+#     ports:
+#       - "3000:3000"
+#     env_file:
+#       - .env
+#     depends_on:
+#       redis:
+#         condition: service_healthy  # waits for Redis healthcheck
+#     command: ["npm", "start"]
 
-  redis:
-    image: redis:6-alpine
-    container_name: redis-server
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+#   redis:
+#     image: redis:6-alpine
+#     container_name: redis-server
+#     ports:
+#       - "6379:6379"
+#     healthcheck:
+#       test: ["CMD", "redis-cli", "ping"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 5

@@ -10,11 +10,14 @@ const { setLocation,
   trackSingleOrder,
   handleSearchPost,
 
-  handleSearchGet,
+  handleSearchGet,getLogin,
+  getSignup,
   
   searchSuggestions,}=require("../controllers/mainController");
 router.get("/set-location", setLocation);
 router.get("/", renderHome);
+router.get("/login", getLogin);      
+router.get("/signup", getSignup);  
 router.post("/login", login);
 router.post("/signup", signup);
 router.get("/logout", logout);
