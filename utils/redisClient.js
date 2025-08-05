@@ -1,26 +1,8 @@
-// const { createClient } = require("redis");
-// require("dotenv").config(); // Load env variables
 
-// const redis = createClient({
-//   url: process.env.REDIS_URL ||
-// });
-
-// redis.on("error", (err) => console.error("❌ Redis Error:", err));
-// redis.on("connect", () => console.log("✅ Redis connected"));
-
-// (async () => {
-//   try {
-//     await redis.connect();
-//   } catch (err) {
-//     console.error("❌ Redis connection failed:", err);
-//   }
-// })();
-
-// module.exports = redis;//use this for local redis (docker)
 const { createClient } = require("redis");
-require("dotenv").config(); // Load env variables
+require("dotenv").config(); 
 
-// Use environment variables for security
+
 const REDIS_USERNAME = process.env.REDIS_USERNAME ;
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD ;
 const REDIS_HOST = process.env.REDIS_HOST ;
@@ -32,7 +14,7 @@ const redis = createClient({
   socket: {
     host: REDIS_HOST,
     port: REDIS_PORT,
-    tls: false, // Set to true if using TLS
+    tls: false, 
     reconnectStrategy: (retries) => {
      
       const delay = Math.min(retries * 100, 5000);
@@ -51,7 +33,7 @@ redis.on("reconnecting", () => console.log("🔁 Redis reconnecting..."));
     await redis.connect();
     
     
-    await redis.set('connection_test', 'success', { EX: 10 }); // Expires in 10 seconds
+    await redis.set('connection_test', 'success', { EX: 10 }); 
     const testResult = await redis.get('connection_test');
     console.log(`Connection test: ${testResult === 'success' ? '✅ Success' : '❌ Failed'}`);
   } catch (err) {
