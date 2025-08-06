@@ -29,7 +29,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 // const redisClient = redis.createClient({
 //    socket: {
-//     host: "redis", // ✅ Use the service name, not 127.0.0.1
+//     host: "redis", 
 //     port: 6379
 //   }
 // });
