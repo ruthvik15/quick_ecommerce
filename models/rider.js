@@ -67,8 +67,6 @@ latitude: {
   default: null
 },
 
-
-  // 🆕 New field: Track slot-wise load
   assignedSlots: {
     type: [assignedSlotSchema],
     default: []
@@ -79,7 +77,7 @@ latitude: {
 
 riderSchema.index({ location: 1, vehicle_type: 1 });
 riderSchema.index({ no_of_orders: -1 });
-// Optional: Composite index on assignedSlots (advanced, can be added to RiderSlotAssignment collection)
+
 
 riderSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
