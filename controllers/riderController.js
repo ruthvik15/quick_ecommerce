@@ -180,9 +180,6 @@ const updateLocation = async (req, res) => {
     const riderId = req.user._id;
     const { latitude, longitude } = req.body;
 
-    // Save to DB
-    await Rider.findByIdAndUpdate(riderId, { latitude, longitude });
-
     // Save to Redis
     const redisKey = `rider:location:${riderId}`;
     await setCache(redisKey, { latitude, longitude }, 600); // cache for 10 mins
