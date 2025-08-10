@@ -10,7 +10,7 @@ function checkcookie(cookie) {
     try {
       const payload = validatetoken(cookieValue);
       req.user = payload;
-      res.locals.user = payload; // 🔥 This makes it available in all EJS files
+      res.locals.user = payload;
     } catch (error) {
       req.user = null;
       res.locals.user = null;
