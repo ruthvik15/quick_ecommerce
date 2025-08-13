@@ -107,5 +107,6 @@ razorpay_payment_id: { type: String }
 
 }, { timestamps: true });
 
+orderSchema.index({ product_id: 1, createdAt: -1,status: 1  });
 const Order = mongoose.model("Order", orderSchema);
 module.exports = Order;
