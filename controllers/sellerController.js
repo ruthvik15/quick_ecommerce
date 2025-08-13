@@ -138,47 +138,47 @@ async function getProductHeatmap(req, res) {
   try {
     const { sellerId, productId } = req.params;
 
-    // Validate seller ownership
+    // Check if the product belongs to the seller
     const product = await Product.findOne({ _id: productId, seller: sellerId });
     if (!product) return res.status(404).send("Product not found or not owned by seller");
 
-    // Last 1 day
-    const oneDayAgo = new Date(Date.now()-24*60*60*1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24 hours
+    const BLOCK_SIZE = 0.1; // ~11 km block size
 
-    // Aggregate orders
+    // Aggregate orders by geographic blocks
     const ordersByBlock = await Order.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           product_id: new mongoose.Types.ObjectId(productId),
           createdAt: { $gte: oneDayAgo },
           status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] }
-        } 
+        }
       },
       {
         $addFields: {
-          latBlock: { $floor: { $multiply: ["$lat", 10] } },
-          lngBlock: { $floor: { $multiply: ["$lng", 10] } }
+          latBlock: { $subtract: ["$lat", { $mod: ["$lat", BLOCK_SIZE] }] },
+          lngBlock: { $subtract: ["$lng", { $mod: ["$lng", BLOCK_SIZE] }] }
         }
       },
       {
         $group: {
           _id: { latBlock: "$latBlock", lngBlock: "$lngBlock" },
-          totalQuantity: { $sum: "$quantity" } // sum product quantity
+          totalQuantity: { $sum: "$quantity" }
         }
       },
       { $sort: { totalQuantity: -1 } }
     ]);
 
-    // Convert to block map for frontend
+    // Store aggregated data in a map for frontend
     const blockMap = {};
     ordersByBlock.forEach(block => {
-      const lng=(block._id.lngBlock / 10).toFixed(1);
-      const lat=(block._id.latBlock / 10).toFixed(1);
-      const key=`${lat}:${lng}`;
-      blockMap[key]=block.totalQuantity;
+      const key = `${block._id.latBlock.toFixed(1)}:${block._id.lngBlock.toFixed(1)}`;
+      blockMap[key] = block.totalQuantity;
     });
 
+    // Render heatmap page
     res.render('seller/productHeatmap', { product, blocks: blockMap });
+
   } catch (err) {
     console.error("Error fetching product heatmap:", err);
     res.status(500).json({ success: false, message: "Server error" });
