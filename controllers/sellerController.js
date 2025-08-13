@@ -134,6 +134,57 @@ async function uploadProduct(req, res) {
   }
 }
 
+async function getProductHeatmap(req, res) {
+  try {
+    const { sellerId, productId } = req.params;
+
+    // Check if the product belongs to the seller
+    const product = await Product.findOne({ _id: productId, seller: sellerId });
+    if (!product) return res.status(404).send("Product not found or not owned by seller");
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24 hours
+    const BLOCK_SIZE = 0.1; // ~11 km block size
+
+    // Aggregate orders by geographic blocks
+    const ordersByBlock = await Order.aggregate([
+      {
+        $match: {
+          product_id: new mongoose.Types.ObjectId(productId),
+          createdAt: { $gte: oneDayAgo },
+          status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] }
+        }
+      },
+      {
+        $addFields: {
+          latBlock: { $subtract: ["$lat", { $mod: ["$lat", BLOCK_SIZE] }] },
+          lngBlock: { $subtract: ["$lng", { $mod: ["$lng", BLOCK_SIZE] }] }
+        }
+      },
+      {
+        $group: {
+          _id: { latBlock: "$latBlock", lngBlock: "$lngBlock" },
+          totalQuantity: { $sum: "$quantity" }
+        }
+      },
+      { $sort: { totalQuantity: -1 } }
+    ]);
+
+    // Store aggregated data in a map for frontend
+    const blockMap = {};
+    ordersByBlock.forEach(block => {
+      const key = `${block._id.latBlock.toFixed(1)}:${block._id.lngBlock.toFixed(1)}`;
+      blockMap[key] = block.totalQuantity;
+    });
+
+    // Render heatmap page
+    res.render('seller/productHeatmap', { product, blocks: blockMap });
+
+  } catch (err) {
+    console.error("Error fetching product heatmap:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
 
 
 module.exports = {
