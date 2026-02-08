@@ -10,13 +10,12 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,  
     required: true,
-    unique: true 
+    unique: true
   },
   password: {
     type: String,
     required: true
   },
-  
   location: {
     type: String,
     enum: ["hyderabad", "bengaluru", "mumbai", "delhi"],
@@ -24,25 +23,30 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["user", "admin","seller"],
     default: "user"
   },
   phone: {
-    type: Number,  
-    required: true
+    type: String,
+    required: true,
   },
   address: {
-    type: String,
-    required: true
+    type: String
   },
+
+  latitude: {
+    type: Number,
+    default: null
+  },
+  longitude: {
+    type: Number,
+    default: null
+  }
 }, { timestamps: true });
 
-userSchema.index({ location: 1, role: 1 }); // Compound index for location/role queries
-
+userSchema.index({ location: 1, role: 1 }); 
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();

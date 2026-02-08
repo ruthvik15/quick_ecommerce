@@ -6,7 +6,6 @@ const { requireAuth } = require("../middleware/auth");
 const { acceptOrder,
   rejectOrder,
   getDashboard,
-  signupRider,
   updateLocationById,
   updateLocation,
   getPendingOrders,
@@ -18,10 +17,8 @@ const { acceptOrder,
   getUnacceptedOrders,
   updateOrderSlot } = require("../controllers/riderController");
 
-// Public route - rider signup
-router.post("/signup", signupRider);
 
-// All other rider routes require authentication
+// All rider routes require authentication
 router.use(requireAuth);
 
 router.post("/orders/accept", acceptOrder);

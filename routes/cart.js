@@ -9,7 +9,7 @@ const {
   decreaseQuantity
 } = require("../controllers/cartController");
 
-// All cart routes require authentication
+// authentication is mandatory for the cart routes
 router.use(requireAuth);
 
 router.get("/", getCart);

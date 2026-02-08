@@ -10,8 +10,8 @@ const Signup = () => {
         password: "",
         phone: "",
         location: "hyderabad",
-        address: "",
         role: "user",
+        vehicle_type: "bike",
     });
     const [error, setError] = useState("");
     const { login } = useContext(AuthContext); // Can auto-login after signup
@@ -75,10 +75,7 @@ const Signup = () => {
                         <input name="phone" onChange={handleChange} required />
                     </div>
 
-                    <div className="form-group">
-                        <label>Address</label>
-                        <textarea name="address" onChange={handleChange} required></textarea>
-                    </div>
+
 
                     <div className="form-group">
                         <label>Location</label>
@@ -98,6 +95,17 @@ const Signup = () => {
                             <option value="rider">Rider</option>
                         </select>
                     </div>
+
+                    {formData.role === "rider" && (
+                        <div className="form-group">
+                            <label>Vehicle Type</label>
+                            <select name="vehicle_type" value={formData.vehicle_type} onChange={handleChange} required>
+                                <option value="bike">Bike</option>
+                                <option value="scooter">Scooter</option>
+                                <option value="car">Car</option>
+                            </select>
+                        </div>
+                    )}
 
                     <button type="submit" className="btn-primary">Sign Up</button>
                 </form>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useRef, useMemo } from "react";
+import 'leaflet/dist/leaflet.css';
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
@@ -47,6 +48,9 @@ const Checkout = () => {
     });
     const [markerPosition, setMarkerPosition] = useState({ lat: 17.3850, lng: 78.4867 });
 
+    const [cityCoords, setCityCoords] = useState({ lat: 17.3850, lng: 78.4867 });
+    const [lastDelivery, setLastDelivery] = useState(null);
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -64,16 +68,27 @@ const Checkout = () => {
                 if (data.success) {
                     setCart(data.cart);
                     setRazorpayKeyId(data.razorpayKeyId);
-                    setFormData(prev => ({
-                        ...prev,
-                        address: data.user.address || "",
-                        phone: data.user.phone || ""
-                    }));
-                    // Set initial marker if user has location, else default to Hyd
-                    /* 
-                       Note: In a real app, you might want to ask for browser location here 
-                       navigator.geolocation.getCurrentPosition(...)
-                    */
+                    setCityCoords(data.cityCoords);
+                    setLastDelivery(data.lastDelivery);
+
+                    // Default view to city coords
+                    setMarkerPosition(data.cityCoords);
+
+                    if (data.lastDelivery) {
+                        setFormData(prev => ({
+                            ...prev,
+                            address: data.lastDelivery.address,
+                            phone: data.lastDelivery.phone || data.user.phone || "",
+                            latitude: data.lastDelivery.lat,
+                            longitude: data.lastDelivery.lng
+                        }));
+                        setMarkerPosition({ lat: data.lastDelivery.lat, lng: data.lastDelivery.lng });
+                    } else {
+                        setFormData(prev => ({
+                            ...prev,
+                            phone: data.user.phone || ""
+                        }));
+                    }
                 } else {
                     alert(data.error);
                     if (data.code === "LOCATION_MISMATCH") {
@@ -92,7 +107,9 @@ const Checkout = () => {
         fetchCheckoutData();
 
         return () => {
-            document.body.removeChild(script);
+            if (document.body.contains(script)) {
+                document.body.removeChild(script);
+            }
         }
     }, [navigate]);
 
@@ -106,6 +123,18 @@ const Checkout = () => {
             }));
         }
     }, [markerPosition]);
+
+    const useLastAddress = () => {
+        if (lastDelivery) {
+            setFormData(prev => ({
+                ...prev,
+                address: lastDelivery.address,
+                latitude: lastDelivery.lat,
+                longitude: lastDelivery.lng
+            }));
+            setMarkerPosition({ lat: lastDelivery.lat, lng: lastDelivery.lng });
+        }
+    };
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -190,9 +219,21 @@ const Checkout = () => {
                             <h3>Delivery Details</h3>
 
                             <div className="form-group">
-                                <label>Delivery Location (Click on map to select)</label>
-                                <div style={{ height: '300px', marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden' }}>
-                                    <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <label>Delivery Location (Click on map to select)</label>
+                                    {lastDelivery && (
+                                        <button
+                                            type="button"
+                                            onClick={useLastAddress}
+                                            className="btn-secondary"
+                                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                                        >
+                                            Use Last Order Location
+                                        </button>
+                                    )}
+                                </div>
+                                <div style={{ height: '300px', marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                    <MapContainer key={`${cityCoords.lat}-${cityCoords.lng}`} center={[cityCoords.lat, cityCoords.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
                                         <TileLayer
                                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -200,8 +241,9 @@ const Checkout = () => {
                                         <LocationMarker position={markerPosition} setPosition={setMarkerPosition} />
                                     </MapContainer>
                                 </div>
-                                <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '1rem' }}>
-                                    Selected: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
+                                <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Selected: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}</span>
+                                    <span style={{ color: 'var(--primary)', fontWeight: '500' }}>← Move marker to your exact door</span>
                                 </div>
                             </div>
 

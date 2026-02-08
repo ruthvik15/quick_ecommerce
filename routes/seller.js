@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require("../middleware/auth");
-const upload = require("../utils/s3Uploader");
+const upload = require("../utils/fileUploader");
 
 const {
   getDashboard,
