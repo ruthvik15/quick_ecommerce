@@ -5,26 +5,27 @@ const Review = require("../models/review");
 const getProductDetail = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate('seller');
-    if (!product) return res.status(404).send('Product not found');
+    if (!product) return res.status(404).json({ error: 'Product not found' });
 
     const reviews = await Review.find({ product_id: product._id })
       .populate('user_id')
       .sort({ createdAt: -1 });
 
-    res.render('product-detail', {
-      user: req.user,
+    res.json({
+      success: true,
       product,
-      reviews
+      reviews,
+      user: req.user
     });
   } catch (err) {
     console.error('Error fetching product:', err);
-    res.status(500).send('Server error');
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
 
 const postReview = async (req, res) => {
-  if (!req.user) return res.status(401).send('You must be logged in to review');
+  if (!req.user) return res.status(401).json({ error: 'You must be logged in to review' });
 
   const { comment, rating } = req.body;
   const productId = req.params.id;
@@ -43,10 +44,10 @@ const postReview = async (req, res) => {
 
     await Product.findByIdAndUpdate(productId, { averageRating: avgRating });
 
-    res.redirect(`/product/${productId}`);
+    res.json({ success: true, message: "Review posted successfully" });
   } catch (err) {
     console.error('Error saving review:', err);
-    res.status(500).send('Error posting review');
+    res.status(500).json({ error: 'Error posting review' });
   }
 };
 

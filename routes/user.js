@@ -10,23 +10,30 @@ const { setLocation,
   trackSingleOrder,
   handleSearchPost,
 
-  handleSearchGet,getLogin,
+  handleSearchGet, getLogin,
   getSignup,
-  
-  searchSuggestions,}=require("../controllers/mainController");
+
+  searchSuggestions, } = require("../controllers/mainController");
 router.get("/set-location", setLocation);
 router.get("/", renderHome);
-router.get("/login", getLogin);      
-router.get("/signup", getSignup);  
+router.get("/login", getLogin);
+router.get("/signup", getSignup);
+router.get("/profile", (req, res) => {
+  if (req.user) {
+    res.json({ success: true, user: req.user });
+  } else {
+    res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+});
 router.post("/login", login);
 router.post("/signup", signup);
 router.get("/logout", logout);
 router.get("/trackorders", trackOrders);
 router.post("/orders/cancel/:id", cancelOrder);
 router.get("/trackorders/:orderId", trackSingleOrder);
-router.get("/search",handleSearchGet );
+router.get("/search", handleSearchGet);
 router.post("/search", handleSearchPost);
-router.get("/search-suggestions",  searchSuggestions,
-  );
+router.get("/search-suggestions", searchSuggestions,
+);
 
 module.exports = router;

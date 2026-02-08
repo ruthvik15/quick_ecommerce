@@ -2,8 +2,10 @@ const Cart = require("../models/cart");
 const Product = require("../models/product");
 
 async function getCart(req, res) {
+  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
   const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
-  res.render("cart", { user: req.user, cart });
+  res.json({ success: true, cart, user: req.user });
 }
 
 async function removeFromCart(req, res) {
@@ -11,16 +13,16 @@ async function removeFromCart(req, res) {
   const cart = await Cart.findOne({ user: req.user._id });
   cart.items = cart.items.filter(item => item.product.toString() !== productId);
   await cart.save();
-  res.redirect("/cart");
+  res.json({ success: true, cart });
 }
 
 async function addToCart(req, res) {
   try {
-    if (!req.user) return res.redirect("/login");
+    if (!req.user) return res.status(401).json({ error: "Please login to add items to cart" });
 
     const userId = req.user._id;
-    const { productId, returnTo } = req.body;
-    if (!productId) return res.status(400).send("Product ID is required");
+    const { productId } = req.body;
+    if (!productId) return res.status(400).json({ error: "Product ID is required" });
 
     let cart = await Cart.findOne({ user: userId });
 
@@ -39,10 +41,10 @@ async function addToCart(req, res) {
       await cart.save();
     }
 
-    res.redirect(returnTo || "/");
+    res.json({ success: true, message: "Added to cart", cart });
   } catch (err) {
     console.error("Error adding to cart:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 }
 
@@ -54,7 +56,7 @@ async function increaseQuantity(req, res) {
     item.quantity++;
     await cart.save();
   }
-  res.redirect("/cart");
+  res.json({ success: true, cart });
 }
 
 async function decreaseQuantity(req, res) {
@@ -65,7 +67,7 @@ async function decreaseQuantity(req, res) {
     item.quantity--;
     await cart.save();
   }
-  res.redirect("/cart");
+  res.json({ success: true, cart });
 }
 
 module.exports = {

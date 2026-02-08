@@ -7,10 +7,12 @@ const razorpay = require("../utils/razorpay");
 const crypto = require("crypto");
 
 async function showCheckoutPage(req, res) {
+  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
   const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
 
   if (!cart || cart.items.length === 0) {
-    return res.redirect("/cart");
+    return res.status(400).json({ error: "Cart is empty" });
   }
 
   const firstLocation = cart.items[0].product.location.toLowerCase();
@@ -19,13 +21,18 @@ async function showCheckoutPage(req, res) {
   );
 
   if (!allSameLocation) {
-    return res.status(400).send("All items in your cart must be from the same city to proceed to checkout.");
+    return res.status(400).json({
+      error: "All items in your cart must be from the same city to proceed to checkout.",
+      code: "LOCATION_MISMATCH"
+    });
   }
 
-  res.render("checkout", {
+  res.json({
+    success: true,
     user: req.user,
     cart,
-    cartLocation: firstLocation
+    cartLocation: firstLocation,
+    razorpayKeyId: process.env.RAZORPAY_KEY_ID // Send key for frontend
   });
 }
 
@@ -169,7 +176,7 @@ async function verifyPayment(req, res) {
 }
 
 function showSuccessPage(req, res) {
-  res.render("order-success", { user: req.user });
+  res.json({ success: true, message: "Order placed successfully" });
 }
 
 module.exports = {

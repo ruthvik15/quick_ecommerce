@@ -24,17 +24,17 @@ const acceptOrder = async (req, res) => {
     const order = await Order.findById(orderId);
 
     if (!order || order.status !== "confirmed") {
-      return res.status(400).send("Order not available");
+      return res.status(400).json({ error: "Order not available" });
     }
 
     order.rider_id = req.user._id;
     order.status = "accepted";
     await order.save();
 
-    res.redirect("/rider/orders/pending");
+    res.json({ success: true, message: "Order accepted", order });
   } catch (err) {
     console.error("Error accepting order:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -43,9 +43,9 @@ const rejectOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
     const order = await Order.findById(orderId);
-    
+
     if (!order || order.status !== "confirmed") {
-      return res.status(400).send("Order not found or already processed.");
+      return res.status(400).json({ error: "Order not found or already processed." });
     }
 
     // Prevent duplicate ignores
@@ -54,17 +54,17 @@ const rejectOrder = async (req, res) => {
       await order.save();
     }
 
-    res.redirect("/rider/orders/pending");
+    res.json({ success: true, message: "Order rejected" });
   } catch (err) {
     console.error("Error rejecting order:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
 // Get rider dashboard
 const getDashboard = async (req, res) => {
   try {
-    if (!req.user) return res.redirect("/login");
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
     const rider = await Rider.findById(req.user._id);
 
@@ -95,14 +95,16 @@ const getDashboard = async (req, res) => {
       deliveryDate: { $gte: today }
     });
 
-    res.render("rider/dashboard", {
+    res.json({
+      success: true,
       rider,
       todaysOrderCount,
-      orderRequestCount
+      orderRequestCount,
+      user: req.user
     });
   } catch (err) {
     console.error("Error fetching dashboard:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -111,16 +113,16 @@ const signupRider = async (req, res) => {
   try {
     const { name, email, password, phone, location, vehicle_type, latitude, longitude, number_plate } = req.body;
     const role = "rider";
-    
+
     // Basic validation
     if (!name || !email || !password || !phone || !location || !vehicle_type || !number_plate) {
-      return res.status(400).send("All fields are required.");
+      return res.status(400).json({ error: "All fields are required." });
     }
 
     // Check for existing rider
     const existing = await Rider.findOne({ email });
     if (existing) {
-      return res.status(400).send("Rider with this email already exists.");
+      return res.status(400).json({ error: "Rider with this email already exists." });
     }
 
     // Create new rider
@@ -143,10 +145,11 @@ const signupRider = async (req, res) => {
     const token = await Rider.matchPassword(email, password);
 
     // Set token in cookie
-    res.cookie("token", token).redirect("/rider/dashboard");
+    res.cookie("token", token, { httpOnly: true });
+    res.json({ success: true, token, role: "rider", user: newRider, redirectUrl: "/rider/dashboard" });
   } catch (err) {
     console.error("Rider signup failed:", err);
-    res.status(500).send("Server error. Try again.");
+    res.status(500).json({ error: "Server error. Try again." });
   }
 };
 
@@ -219,12 +222,11 @@ const getPendingOrders = async (req, res) => {
         _id: order._id,
         deliveryDate: order.deliveryDate,
         deliverySlot: order.deliverySlot,
-        address: order.user_id.address,
-        userName: order.user_id.name,
-        userLocation: order.user_id.location,
-        productName: order.product_id.name,
+        address: order.user_id?.address,
+        userName: order.user_id?.name,
+        userLocation: order.user_id?.location,
+        productName: order.product_id?.name,
         status: order.status,
-        address: order.address,
         ph_number: order.ph_number,
         paid: order.paid
       });
@@ -237,14 +239,15 @@ const getPendingOrders = async (req, res) => {
       );
     });
 
-    res.render("rider/order-pending", {
+    res.json({
+      success: true,
       user: req.user,
       groupedOrders,
       status: "confirmed"
     });
   } catch (err) {
     console.error("Error fetching confirmed orders:", err);
-    res.status(500).send("Server Error");
+    res.status(500).json({ error: "Server Error" });
   }
 };
 
@@ -256,7 +259,7 @@ const getTodayOrders = async (req, res) => {
 
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     // Fetch only accepted orders for the logged-in rider and today's delivery
     const orders = await Order.find({
       status: { $in: ["accepted", "out-for-delivery", "delivered"] },
@@ -272,15 +275,15 @@ const getTodayOrders = async (req, res) => {
     orders.forEach(order => {
       const slot = order.deliverySlot;
       if (!groupedSlots[slot]) groupedSlots[slot] = [];
-      
+
       groupedSlots[slot].push({
         _id: order._id,
         deliveryDate: order.deliveryDate,
         deliverySlot: slot,
-        address: order.user_id.address,
-        userName: order.user_id.name,
-        userLocation: order.user_id.location,
-        productName: order.product_id.name,
+        address: order.user_id?.address,
+        userName: order.user_id?.name,
+        userLocation: order.user_id?.location,
+        productName: order.product_id?.name,
         status: order.status,
         payment: order.paid ? "prepaid" : "cod"
       });
@@ -294,13 +297,14 @@ const getTodayOrders = async (req, res) => {
         return acc;
       }, {});
 
-    res.render("rider/orders-today", {
+    res.json({
+      success: true,
       user: req.user,
       groupedSlots: sortedGroupedSlots
     });
   } catch (err) {
     console.error("Error fetching today's orders:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -309,16 +313,16 @@ const markOrderOutForDelivery = async (req, res) => {
   try {
     const { orderId } = req.body;
     req.user.status = "out-for-delivery";
-    
+
     await Order.findByIdAndUpdate(orderId, {
       status: req.user.status,
       rider_id: req.user._id
     });
-    
-    res.redirect("/rider/orders/today");
+
+    res.json({ success: true, message: "Order Out for Delivery" });
   } catch (err) {
     console.error("Error marking order out for delivery:", err);
-    res.status(500).send("Failed to update order status");
+    res.status(500).json({ error: "Failed to update order status" });
   }
 };
 
@@ -329,11 +333,11 @@ const markOrderComplete = async (req, res) => {
     await Order.findByIdAndUpdate(orderId, {
       status: "delivered"
     });
-    
-    res.redirect("/rider/orders/today");
+
+    res.json({ success: true, message: "Order Delivered" });
   } catch (err) {
     console.error("Error completing order:", err);
-    res.status(500).send("Failed to mark order delivered");
+    res.status(500).json({ error: "Failed to mark order delivered" });
   }
 };
 
@@ -354,24 +358,25 @@ const getAcceptedOrders = async (req, res) => {
     activeOrders.forEach(order => {
       const dateKey = new Date(order.deliveryDate).toDateString();
       if (!grouped[dateKey]) grouped[dateKey] = [];
-      
+
       grouped[dateKey].push({
         _id: order._id,
-        productName: order.product_id.name,
-        userName: order.user_id.name,
-        address: order.user_id.address,
+        productName: order.product_id?.name,
+        userName: order.user_id?.name,
+        address: order.user_id?.address,
         deliverySlot: order.deliverySlot,
         status: order.status
       });
     });
 
-    res.render("rider/orders-active", {
+    res.json({
+      success: true,
       user: req.user,
       groupedOrders: grouped
     });
   } catch (err) {
     console.error("Error fetching active rider orders:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -392,24 +397,25 @@ const getCompletedOrders = async (req, res) => {
     deliveredOrders.forEach(order => {
       const dateKey = new Date(order.deliveryDate).toDateString();
       if (!grouped[dateKey]) grouped[dateKey] = [];
-      
+
       grouped[dateKey].push({
         _id: order._id,
-        productName: order.product_id.name,
-        userName: order.user_id.name,
-        address: order.user_id.address,
+        productName: order.product_id?.name,
+        userName: order.user_id?.name,
+        address: order.user_id?.address,
         deliverySlot: order.deliverySlot,
         status: order.status
       });
     });
 
-    res.render("rider/orders-completed", {
+    res.json({
+      success: true,
       user: req.user,
       groupedOrders: grouped
     });
   } catch (err) {
     console.error("Error fetching completed orders:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -418,14 +424,14 @@ const getUnacceptedOrders = async (req, res) => {
   try {
     const now = new Date();
     const orders = await Order.find({ status: "missed" });
-    
+
     const unacceptedOrders = orders.filter(order => {
       const slotStartHour = slotOrder[order.deliverySlot];
       if (!slotStartHour) return false;
 
       const slotStart = new Date(order.deliveryDate);
       slotStart.setHours(slotStartHour, 0, 0, 0);
-      
+
       return now >= slotStart;
     });
 
@@ -449,10 +455,10 @@ const updateOrderSlot = async (req, res) => {
       status: "confirmed"
     });
 
-    res.redirect("/rider/orders/unaccepted");
+    res.json({ success: true, message: "Order slot updated" });
   } catch (err) {
     console.error("Failed to update delivery slot", err);
-    res.status(500).send("Error updating slot");
+    res.status(500).json({ error: "Error updating slot" });
   }
 };
 
