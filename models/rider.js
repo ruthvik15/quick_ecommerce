@@ -31,27 +31,29 @@ const riderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-
   location: {
     type: String,
     enum: ["hyderabad", "bengaluru", "mumbai", "delhi"],
     required: true
   },
-  role:{
-    type:String,
-    enum:["user","rider"],
-    default:"rider"
+  role: {
+    type: String,
+    default: "rider"
   },
   phone: {
     type: String,
-    required: true
+    required: true,
+  },
+  address: {
+    type: String,
+    required: true 
   },
   no_of_orders: {
     type: Number,
     default: 0  
   },
-  number_plate:{
-    type:String,
+  number_plate: {
+    type: String,
   },
   vehicle_type: {  
     type: String,
@@ -59,25 +61,21 @@ const riderSchema = new mongoose.Schema({
     required: true
   },
   longitude: {
-  type: Number,
-  default: null
-},
-latitude: {
-  type: Number,
-  default: null
-},
-
+    type: Number,
+    default: null
+  },
+  latitude: {
+    type: Number,
+    default: null
+  },
   assignedSlots: {
     type: [assignedSlotSchema],
     default: []
   }
-
 }, { timestamps: true });
-
 
 riderSchema.index({ location: 1, vehicle_type: 1 });
 riderSchema.index({ no_of_orders: -1 });
-
 
 riderSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
@@ -86,7 +84,6 @@ riderSchema.pre("save", async function (next) {
   next();
 });
 
-// ✅ Match password for login
 riderSchema.static("matchPassword", async function (email, plainPassword) {
   const rider = await this.findOne({ email });
   if (!rider) throw new Error("Rider not found");

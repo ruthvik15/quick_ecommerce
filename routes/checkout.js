@@ -8,7 +8,7 @@ const {
   showSuccessPage
 } = require("../controllers/checkoutController");
 
-// All checkout routes require authentication
+// authentication is mandatory for the checkout routes
 router.use(requireAuth);
 
 router.get("/", showCheckoutPage);

@@ -25,18 +25,36 @@ async function showCheckoutPage(req, res) {
     });
   }
 
+  // Get last used address/coords for this user
+  const lastOrder = await Order.findOne({ user_id: req.user._id })
+    .sort({ createdAt: -1 });
+
+  const cityData = cityCoords[firstLocation] || cityCoords["hyderabad"];
+
   res.json({
     success: true,
     user: req.user,
     cart,
     cartLocation: firstLocation,
-    razorpayKeyId: process.env.RAZORPAY_KEY_ID // Send key for frontend
+    cityCoords: cityData,
+    lastDelivery: lastOrder ? {
+      address: lastOrder.address,
+      lat: lastOrder.lat,
+      lng: lastOrder.lng,
+      phone: lastOrder.ph_number
+    } : null,
+    razorpayKeyId: process.env.RAZORPAY_KEY_ID
   });
 }
 
 async function processCheckout(req, res) {
   try {
     const { deliveryDate, deliverySlot, latitude, longitude, paymentMethod, address, phone } = req.body;
+
+    if (!address || !latitude || !longitude) {
+      return res.status(400).json({ error: "Delivery address and location coordinates are required" });
+    }
+
     const userId = req.user._id;
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {

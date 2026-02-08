@@ -2,9 +2,11 @@ const path = require("path");
 const User = require("../models/user");
 const Product = require("../models/product");
 const Rider = require("../models/rider");
+const Seller = require("../models/seller");
 const Order = require("../models/order");
 const { getCache, setCache } = require("../utils/cache");
 const razorpay = require("../utils/razorpay");
+const { createtoken } = require("../utils/auth");
 
 const cityCoords = require("../utils/cityCoordinates");
 const getDistanceKm = require("../utils/distance");
@@ -28,36 +30,21 @@ const renderHome = async (req, res) => {
   const filter = { location: selectedLocation, status: { $ne: "stopped" } };
   const sortOption = {};
 
-  if (category && category !== "All Products") {
-    filter.category = category.toLowerCase();
-  }
+  if (category && category !== "All Products") filter.category = category.toLowerCase();
 
   if (sort === "low-high") sortOption.price = 1;
   else if (sort === "high-low") sortOption.price = -1;
   else if (sort === "newest") sortOption.createdAt = -1;
 
-  // Cache key includes pagination params
   const cacheKey = `products:${selectedLocation}:${category || "all"}:${sort || "default"}:${pageNum}:${limitNum}`;
   const cached = await getCache(cacheKey);
 
   if (cached) {
-    return res.json({
-      success: true,
-      ...cached,
-      user: req.user
-    });
+    return res.json({ success: true, ...cached, user: req.user });
   }
 
-  // Fetch limit+1 to check if there's a next page
-  const products = await Product.find(filter)
-    .sort(sortOption)
-    .skip(skip)
-    .limit(limitNum + 1);
-
-  // Check if there's a next page
+  const products = await Product.find(filter).sort(sortOption).skip(skip).limit(limitNum + 1);
   const hasNextPage = products.length > limitNum;
-
-  // Return only the requested limit
   const paginatedProducts = hasNextPage ? products.slice(0, limitNum) : products;
 
   const categories = ["All Products", "groceries", "electronics", "clothing", "food"];
@@ -68,62 +55,50 @@ const renderHome = async (req, res) => {
     selectedLocation,
     selectedCategory: category || "",
     selectedSort: sort || "",
-    pagination: {
-      currentPage: pageNum,
-      limit: limitNum,
-      hasNextPage
-    }
+    pagination: { currentPage: pageNum, limit: limitNum, hasNextPage }
   };
 
   await setCache(cacheKey, responseData);
-
-  res.json({
-    success: true,
-    ...responseData,
-    user: req.user
-  });
-};
-const getLogin = (req, res) => {
-  res.render("login");
+  res.json({ success: true, ...responseData, user: req.user });
 };
 
-const getSignup = (req, res) => {
-  res.render("signup");
-};
 
 const login = async (req, res) => {
   const { email, password, role } = req.body;
 
   try {
+    let token, user, redirectUrl;
+
     if (role === "rider") {
-      const token = await Rider.matchPassword(email, password);
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: false, // Set to true in production
-        sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000 // 1 day
-      });
-      return res.json({ success: true, token, role: "rider", redirectUrl: "/rider/dashboard" });
+      token = await Rider.matchPassword(email, password);
+      user = await Rider.findOne({ email }).select("-password");
+      redirectUrl = "/rider/dashboard";
+    }
+    else if (role === "seller") {
+      token = await Seller.matchPassword(email, password);
+      user = await Seller.findOne({ email }).select("-password");
+      redirectUrl = "/seller/dashboard";
+    }
+    else {
+      token = await User.matchPassword(email, password);
+      user = await User.findOne({ email }).select("-password");
+      redirectUrl = "/";
+      res.clearCookie("selectedLocation");
     }
 
-    const token = await User.matchPassword(email, password);
-    const user = await User.findOne({ email });
-
-    if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user || !token) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: 'strict',
       maxAge: 24 * 60 * 60 * 1000
     });
+    //todo refactor not to send total user object
+    return res.json({ success: true, token, role, user, redirectUrl });
 
-    if (role === "seller") {
-      return res.json({ success: true, token, role: "seller", redirectUrl: "/seller/dashboard" });
-    }
-
-    res.clearCookie("selectedLocation");
-    return res.json({ success: true, token, role: "user", user, redirectUrl: "/" });
   } catch (error) {
     console.error("Login error:", error);
     return res.status(400).json({ error: "Email or password incorrect." });
@@ -131,39 +106,45 @@ const login = async (req, res) => {
 };
 
 const signup = async (req, res) => {
-  const { name, email, password, phone, location, role, address } = req.body;
+  const { name, email, password, phone, location, role, vehicle_type, address, shopName } = req.body;
 
-  if (!name || !email || !password || !phone || !location || !role || !address) {
+  if (!name || !email || !password || !phone || !location || !role) {
     return res.status(400).json({ error: "All fields are required." });
   }
 
   try {
+    let newUser, redirectUrl;
+
     if (role === "rider") {
-      // Rider signup page rendering logic - might need separate handling for API
-      // For now, returning specific error or instruction
-      return res.status(400).json({ error: "Rider signup not yet implemented via API" });
+      if (!vehicle_type || !address) return res.status(400).json({ error: "Vehicle and Address required." });
+      newUser = new Rider({ name, email, password, phone, location, role, vehicle_type, address });
+      redirectUrl = "/rider/dashboard";
+    }
+    else if (role === "seller") {
+      if (!address || !shopName) return res.status(400).json({ error: "Shop Name and Address required." });
+      newUser = new Seller({ name, email, password, phone, location, role, address, shopName });
+      redirectUrl = "/seller/dashboard";
+    }
+    else {
+      newUser = new User({ name, email, password, phone, location, role, address: "" });
+      redirectUrl = "/";
     }
 
-    const user = new User({ name, email, password, phone, location, role, address });
-    await user.save();
+    await newUser.save();
+    const token = createtoken(newUser);
 
-    const token = await User.matchPassword(email, password);
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
+    //todo refactor not to send total user object
+    return res.json({ success: true, token, role, user: newUser, redirectUrl });
 
-    if (role === "seller") {
-      return res.json({ success: true, token, role: "seller", redirectUrl: "/seller/dashboard" });
-    }
-
-    res.clearCookie("selectedLocation");
-    return res.json({ success: true, token, role, user, redirectUrl: "/" });
   } catch (err) {
     console.error("Signup error:", err);
-    if (err.code === 11000) return res.status(400).json({ error: "Email or phone already exists." });
+    if (err.code === 11000) return res.status(400).json({ error: "Email, Phone, or Shop Name already exists." });
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -176,7 +157,6 @@ const logout = (req, res) => {
 const trackOrders = async (req, res) => {
   const now = new Date();
   const slotStartHours = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
-
   let orders = await Order.find({ user_id: req.user._id }).populate("product_id").sort({ createdAt: -1 });
   let missedOrdersCount = 0;
 
@@ -194,36 +174,21 @@ const trackOrders = async (req, res) => {
       }
     }
   }
-
-  res.json({
-    success: true,
-    user: req.user,
-    orders,
-    missedOrdersCount,
-  });
+  res.json({ success: true, user: req.user, orders, missedOrdersCount });
 };
 
 const cancelOrder = async (req, res) => {
   const { orderId } = req.body;
-
   try {
     const order = await Order.findOne({
       _id: orderId,
       user_id: req.user._id,
       status: { $in: ["confirmed", "missed"] },
     });
-
     if (!order) return res.status(400).json({ error: "Invalid or already processed order" });
 
     if (order.paid && order.razorpay_payment_id) {
-      try {
-        await razorpay.payments.refund(order.razorpay_payment_id, {
-          amount: order.total * 100,
-        });
-      } catch (refundErr) {
-        console.error("Refund failed:", refundErr);
-        return res.status(500).json({ error: "Refund failed. Please contact support." });
-      }
+      await razorpay.payments.refund(order.razorpay_payment_id, { amount: order.total * 100 });
     }
 
     await Product.findByIdAndUpdate(order.product_id, {
@@ -232,7 +197,6 @@ const cancelOrder = async (req, res) => {
 
     order.status = "cancelled";
     await order.save();
-
     res.json({ success: true, message: "Order cancelled" });
   } catch (err) {
     console.error("Cancel failed:", err);
@@ -241,32 +205,32 @@ const cancelOrder = async (req, res) => {
 };
 
 const trackSingleOrder = async (req, res) => {
-  const Order = require("../models/order");
-
   try {
     const order = await Order.findById(req.params.orderId)
       .populate("rider_id")
       .populate("user_id")
       .populate("product_id");
 
-    if (!order || !order.rider_id || !order.user_id) {
-      return res.status(404).json({ error: "Order or delivery information not found" });
+    if (!order || !order.user_id) {
+      return res.status(404).json({ error: "Order or user info not found" });
     }
 
-    const redisKey = `rider:location:${order.rider_id._id}`;
-    const cachedCoords = await getCache(redisKey);
-
-    const riderCoords = cachedCoords
-      ? { lat: cachedCoords.latitude, lng: cachedCoords.longitude }
-      : { lat: order.rider_id.latitude, lng: order.rider_id.longitude };
+    let riderCoords = null;
+    if (order.rider_id) {
+      const redisKey = `rider:location:${order.rider_id._id}`;
+      const cachedCoords = await getCache(redisKey);
+      riderCoords = cachedCoords
+        ? { lat: cachedCoords.latitude, lng: cachedCoords.longitude }
+        : { lat: order.rider_id.latitude, lng: order.rider_id.longitude };
+    }
 
     res.json({
       success: true,
       user: req.user,
       order,
-      rider: order.rider_id,
+      rider: order.rider_id || null,
       product: order.product_id,
-      userCoords: { lat: order.lat, lng: order.lng }, // lat/lng might be on user or order depending on schema, assuming order for now as per render
+      userCoords: { lat: order.user_id.latitude, lng: order.user_id.longitude },
       riderCoords,
     });
   } catch (err) {
@@ -274,69 +238,41 @@ const trackSingleOrder = async (req, res) => {
     res.status(500).json({ error: "Error loading order tracking" });
   }
 };
+
 function escapeRegex(text) {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 }
 
-// 🔍 GET /search-suggestions
 const searchSuggestions = async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     if (!q) return res.json([]);
-
-    const docs = await Product
-      .find({ name: new RegExp("^" + q, "i") })
-      .limit(5)
-      .select("name -_id");
-
-    const names = docs.map(d => d.name);
-    res.json(names);
+    const docs = await Product.find({ name: new RegExp("^" + escapeRegex(q), "i") }).limit(5).select("name -_id");
+    res.json(docs.map(d => d.name));
   } catch (err) {
-    console.error("Suggestions error:", err);
-    res.status(500).json({ error: "Failed to fetch suggestions" });
+    res.status(500).json({ error: "Failed" });
   }
 };
 
-// 🔎 POST /search (homepage search box)
 const handleSearchPost = async (req, res) => {
   const { searchQuery } = req.body;
-
-  if (!searchQuery || searchQuery.trim() === "") {
-    return res.json({ success: false, error: "Empty query" });
-  }
-
+  if (!searchQuery?.trim()) return res.json({ success: false, error: "Empty query" });
   try {
-    const safeQuery = escapeRegex(searchQuery.trim());
-    const regex = new RegExp(safeQuery, "i");
-    const results = await Product.find({ name: regex });
-
-    return res.json({
-      success: true,
-      query: searchQuery,
-      products: results,
-      selectedCategory: "",
-      selectedSort: ""
-    });
+    const results = await Product.find({ name: new RegExp(escapeRegex(searchQuery.trim()), "i") });
+    return res.json({ success: true, query: searchQuery, products: results, selectedCategory: "", selectedSort: "" });
   } catch (err) {
-    console.error("Search failed:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// 🔎 GET /search (search results + filter/sort)
 const handleSearchGet = async (req, res) => {
   const { searchQuery = "", category, sort, page = 1, limit = 10 } = req.query;
-
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
 
-  const safeQuery = escapeRegex(searchQuery.trim());
-  let query = { name: new RegExp(safeQuery, "i") };
-
-  if (category) {
-    query.category = category;
-  }
+  let query = { name: new RegExp(escapeRegex(searchQuery.trim()), "i") };
+  if (category) query.category = category;
 
   let sortOption = {};
   if (sort === "low-high") sortOption.price = 1;
@@ -344,16 +280,8 @@ const handleSearchGet = async (req, res) => {
   else if (sort === "newest") sortOption.createdAt = -1;
 
   try {
-    // Fetch limit+1 to check if there's a next page
-    const products = await Product.find(query)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNum + 1);
-
-    // Check if there's a next page
+    const products = await Product.find(query).sort(sortOption).skip(skip).limit(limitNum + 1);
     const hasNextPage = products.length > limitNum;
-
-    // Return only the requested limit
     const paginatedProducts = hasNextPage ? products.slice(0, limitNum) : products;
 
     res.json({
@@ -362,32 +290,14 @@ const handleSearchGet = async (req, res) => {
       products: paginatedProducts,
       selectedCategory: category || "",
       selectedSort: sort || "",
-      pagination: {
-        currentPage: pageNum,
-        limit: limitNum,
-        hasNextPage
-      }
+      pagination: { currentPage: pageNum, limit: limitNum, hasNextPage }
     });
   } catch (err) {
-    console.error("Search query failed:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
 module.exports = {
-  setLocation,
-  renderHome,
-  login,
-  signup,
-  logout,
-  trackOrders,
-  cancelOrder,
-  trackSingleOrder,
-  searchSuggestions,
-  handleSearchPost,
-  handleSearchGet,
-  getLogin,
-  getSignup,
-  searchSuggestions,
-
+  setLocation, renderHome, login, signup, logout, trackOrders, cancelOrder,
+  trackSingleOrder, searchSuggestions, handleSearchPost, handleSearchGet
 };
