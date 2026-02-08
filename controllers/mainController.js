@@ -18,12 +18,10 @@ const setLocation = (req, res) => {
 };
 
 const renderHome = async (req, res) => {
-  if (req.user) {
-    if (req.user.role === "seller") return res.redirect("/seller/dashboard");
-    else if (req.user.role === "rider") return res.redirect("/rider/dashboard");
-  }
+  // If user role check is needed for redirection, handle in frontend or specific auth route
+  // The API should just return data
 
-  const selectedLocation = req.cookies.selectedLocation || req.user?.location || "hyderabad";
+  const selectedLocation = req.query.location || req.cookies.selectedLocation || req.user?.location || "hyderabad";
   const { category, sort } = req.query;
   const filter = { location: selectedLocation, status: { $ne: "stopped" } };
   const sortOption = {};
@@ -40,9 +38,10 @@ const renderHome = async (req, res) => {
   const cached = await getCache(cacheKey);
 
   if (cached) {
-    return res.render("layout", {
+    return res.json({
+      success: true,
       ...cached,
-      user: req.user,
+      user: req.user
     });
   }
 
@@ -57,7 +56,8 @@ const renderHome = async (req, res) => {
     selectedSort: sort || "",
   });
 
-  res.render("layout", {
+  res.json({
+    success: true,
     products,
     categories,
     user: req.user,
@@ -80,21 +80,36 @@ const login = async (req, res) => {
   try {
     if (role === "rider") {
       const token = await Rider.matchPassword(email, password);
-      return res.cookie("token", token).redirect("/rider/dashboard");
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: false, // Set to true in production
+        sameSite: 'strict',
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+      });
+      return res.json({ success: true, token, role: "rider", redirectUrl: "/rider/dashboard" });
     }
 
     const token = await User.matchPassword(email, password);
     const user = await User.findOne({ email });
 
-    if (!user) return res.status(400).send("User not found");
+    if (!user) return res.status(400).json({ error: "User not found" });
 
-    if (role === "seller") return res.cookie("token", token).redirect("/seller/dashboard");
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    if (role === "seller") {
+      return res.json({ success: true, token, role: "seller", redirectUrl: "/seller/dashboard" });
+    }
 
     res.clearCookie("selectedLocation");
-    return res.cookie("token", token).redirect("/");
+    return res.json({ success: true, token, role: "user", user, redirectUrl: "/" });
   } catch (error) {
     console.error("Login error:", error);
-    return res.status(400).send("Email or password incorrect.");
+    return res.status(400).json({ error: "Email or password incorrect." });
   }
 };
 
@@ -102,38 +117,48 @@ const signup = async (req, res) => {
   const { name, email, password, phone, location, role, address } = req.body;
 
   if (!name || !email || !password || !phone || !location || !role || !address) {
-    return res.status(400).send("All fields are required.");
+    return res.status(400).json({ error: "All fields are required." });
   }
 
   try {
     if (role === "rider") {
-      return res.render("rider/signup", {
-        rider: { name, email, password, phone, location, role },
-      });
+      // Rider signup page rendering logic - might need separate handling for API
+      // For now, returning specific error or instruction
+      return res.status(400).json({ error: "Rider signup not yet implemented via API" });
     }
 
     const user = new User({ name, email, password, phone, location, role, address });
     await user.save();
 
     const token = await User.matchPassword(email, password);
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000
+    });
 
-    if (role === "seller") return res.cookie("token", token).redirect("/seller/dashboard");
+    if (role === "seller") {
+      return res.json({ success: true, token, role: "seller", redirectUrl: "/seller/dashboard" });
+    }
 
     res.clearCookie("selectedLocation");
-    return res.cookie("token", token).redirect("/");
+    return res.json({ success: true, token, role, user, redirectUrl: "/" });
   } catch (err) {
     console.error("Signup error:", err);
-    if (err.code === 11000) return res.status(400).send("Email or phone already exists.");
-    res.status(500).send("Server error");
+    if (err.code === 11000) return res.status(400).json({ error: "Email or phone already exists." });
+    res.status(500).json({ error: "Server error" });
   }
 };
 
 const logout = (req, res) => {
   res.clearCookie("token");
-  res.redirect("/");
+  res.json({ success: true, message: "Logged out successfully" });
 };
 
 const trackOrders = async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
   const now = new Date();
   const slotStartHours = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
 
@@ -155,7 +180,8 @@ const trackOrders = async (req, res) => {
     }
   }
 
-  res.render("track-order", {
+  res.json({
+    success: true,
     user: req.user,
     orders,
     missedOrdersCount,
@@ -172,7 +198,7 @@ const cancelOrder = async (req, res) => {
       status: { $in: ["confirmed", "missed"] },
     });
 
-    if (!order) return res.status(400).send("Invalid or already processed order");
+    if (!order) return res.status(400).json({ error: "Invalid or already processed order" });
 
     if (order.paid && order.razorpay_payment_id) {
       try {
@@ -181,7 +207,7 @@ const cancelOrder = async (req, res) => {
         });
       } catch (refundErr) {
         console.error("Refund failed:", refundErr);
-        return res.status(500).send("Refund failed. Please contact support.");
+        return res.status(500).json({ error: "Refund failed. Please contact support." });
       }
     }
 
@@ -192,10 +218,10 @@ const cancelOrder = async (req, res) => {
     order.status = "cancelled";
     await order.save();
 
-    res.redirect("/trackorders");
+    res.json({ success: true, message: "Order cancelled" });
   } catch (err) {
     console.error("Cancel failed:", err);
-    res.status(500).send("Error cancelling order");
+    res.status(500).json({ error: "Error cancelling order" });
   }
 };
 
@@ -209,7 +235,7 @@ const trackSingleOrder = async (req, res) => {
       .populate("product_id");
 
     if (!order || !order.rider_id || !order.user_id) {
-      return res.status(404).send("Order or delivery information not found");
+      return res.status(404).json({ error: "Order or delivery information not found" });
     }
 
     const redisKey = `rider:location:${order.rider_id._id}`;
@@ -219,17 +245,18 @@ const trackSingleOrder = async (req, res) => {
       ? { lat: cachedCoords.latitude, lng: cachedCoords.longitude }
       : { lat: order.rider_id.latitude, lng: order.rider_id.longitude };
 
-    res.render("route-order", {
+    res.json({
+      success: true,
       user: req.user,
       order,
       rider: order.rider_id,
       product: order.product_id,
-      userCoords: { lat: order.lat, lng: order.lng },
+      userCoords: { lat: order.lat, lng: order.lng }, // lat/lng might be on user or order depending on schema, assuming order for now as per render
       riderCoords,
     });
   } catch (err) {
     console.error("Tracking error:", err);
-    res.status(500).send("Error loading order tracking");
+    res.status(500).json({ error: "Error loading order tracking" });
   }
 };
 function escapeRegex(text) {
@@ -260,7 +287,7 @@ const handleSearchPost = async (req, res) => {
   const { searchQuery } = req.body;
 
   if (!searchQuery || searchQuery.trim() === "") {
-    return res.redirect("/");
+    return res.json({ success: false, error: "Empty query" });
   }
 
   try {
@@ -268,17 +295,16 @@ const handleSearchPost = async (req, res) => {
     const regex = new RegExp(safeQuery, "i");
     const results = await Product.find({ name: regex });
 
-    return res.render("search-results", {
-      user: req.user,
+    return res.json({
+      success: true,
       query: searchQuery,
       products: results,
-      returnTo: `/search?searchQuery=${encodeURIComponent(searchQuery)}`,
       selectedCategory: "",
       selectedSort: ""
     });
   } catch (err) {
     console.error("Search failed:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -300,17 +326,16 @@ const handleSearchGet = async (req, res) => {
 
   try {
     const products = await Product.find(query).sort(sortOption);
-    res.render("search-results", {
-      user: req.user,
+    res.json({
+      success: true,
       products,
       query: searchQuery,
       selectedCategory: category || "",
-      selectedSort: sort || "",
-      returnTo: req.originalUrl
+      selectedSort: sort || ""
     });
   } catch (err) {
     console.error("GET Search failed:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -326,8 +351,8 @@ module.exports = {
   searchSuggestions,
   handleSearchPost,
   handleSearchGet,
-getLogin,
+  getLogin,
   getSignup,
   searchSuggestions,
-  
+
 };

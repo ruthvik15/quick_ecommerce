@@ -16,7 +16,7 @@ async function invalidateProductCaches(product) {
 }
 
 async function getDashboard(req, res) {
-  if (!req.user || req.user.role !== 'seller') return res.redirect('/login');
+  if (!req.user || req.user.role !== 'seller') return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const products = await Product.find({ seller: req.user._id });
@@ -45,10 +45,10 @@ async function getDashboard(req, res) {
       };
     });
 
-    res.render('seller/dashboard', { user: req.user, products: dashboardProducts });
+    res.json({ success: true, user: req.user, products: dashboardProducts });
   } catch (error) {
     console.error('Error loading seller dashboard:', error);
-    res.status(500).send('Error loading dashboard.');
+    res.status(500).json({ error: 'Error loading dashboard.' });
   }
 }
 
@@ -56,50 +56,50 @@ async function stopProduct(req, res) {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, { status: 'stopped' });
     if (product) await invalidateProductCaches(product);
-    res.redirect('/seller/dashboard');
+    res.json({ success: true, message: "Product stopped" });
   } catch (error) {
     console.error('Error stopping product:', error);
-    res.status(500).send('Error stopping product.');
+    res.status(500).json({ error: 'Error stopping product.' });
   }
 }
 
 async function updatePrice(req, res) {
   try {
     const delta = parseFloat(req.body.change);
-    if (isNaN(delta)) return res.status(400).send('Invalid price change amount.');
+    if (isNaN(delta)) return res.status(400).json({ error: 'Invalid price change amount.' });
 
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).send('Product not found.');
+    if (!product) return res.status(404).json({ error: 'Product not found.' });
 
     const newPrice = product.price + delta;
-    if (newPrice < 1) return res.status(400).send('Price cannot go below 1.');
+    if (newPrice < 1) return res.status(400).json({ error: 'Price cannot go below 1.' });
 
     await Product.findByIdAndUpdate(product._id, { price: newPrice });
     await invalidateProductCaches(product);
-    res.redirect('/seller/dashboard');
+    res.json({ success: true, message: "Price updated" });
   } catch (error) {
     console.error('Error updating price:', error);
-    res.status(500).send('Error updating price.');
+    res.status(500).json({ error: 'Error updating price.' });
   }
 }
 
 async function updateQuantity(req, res) {
   try {
     const change = parseInt(req.body.change, 10);
-    if (isNaN(change)) return res.status(400).send('Invalid quantity change.');
+    if (isNaN(change)) return res.status(400).json({ error: 'Invalid quantity change.' });
 
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).send('Product not found.');
+    if (!product) return res.status(404).json({ error: 'Product not found.' });
 
     const newQty = product.quantity + change;
-    if (newQty < 0) return res.status(400).send('Quantity cannot go below 0.');
+    if (newQty < 0) return res.status(400).json({ error: 'Quantity cannot go below 0.' });
 
     await Product.findByIdAndUpdate(product._id, { quantity: newQty });
     await invalidateProductCaches(product);
-    res.redirect('/seller/dashboard');
+    res.json({ success: true, message: "Quantity updated" });
   } catch (error) {
     console.error('Error updating quantity:', error);
-    res.status(500).send('Error updating quantity.');
+    res.status(500).json({ error: 'Error updating quantity.' });
   }
 }
 
@@ -111,10 +111,12 @@ async function uploadProduct(req, res) {
   try {
     const { name, price, location, category, description, quantity } = req.body;
     if (!req.file || !name || !price || !location || !category || !description || !quantity) {
-      return res.status(400).send("All fields including image are required");
+      return res.status(400).json({ error: "All fields including image are required" });
     }
 
-    const imageUrl = req.file.location;
+    // Handle Cloudinary (path/secure_url), S3 (location), or Local (filename)
+    const imageUrl = req.file.path || req.file.secure_url || req.file.location || `/uploads/${req.file.filename}`;
+
     const product = await Product.create({
       name,
       price,
@@ -123,14 +125,14 @@ async function uploadProduct(req, res) {
       quantity,
       location,
       category,
-      seller: res.locals.user._id
+      seller: req.user._id // Use req.user instead of res.locals.user
     });
 
     await invalidateProductCaches(product);
-    res.redirect("/seller/dashboard");
+    res.json({ success: true, message: "Product created", product });
   } catch (error) {
     console.error("Product upload failed:", error);
-    res.status(500).send("Internal Server Error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
 }
 
@@ -140,7 +142,7 @@ async function getProductHeatmap(req, res) {
 
     // Check if the product belongs to the seller
     const product = await Product.findOne({ _id: productId, seller: sellerId });
-    if (!product) return res.status(404).send("Product not found or not owned by seller");
+    if (!product) return res.status(404).json({ error: "Product not found or not owned by seller" });
 
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24 hours
     const BLOCK_SIZE = 0.1; // ~11 km block size
@@ -176,8 +178,7 @@ async function getProductHeatmap(req, res) {
       blockMap[key] = block.totalQuantity;
     });
 
-    // Render heatmap page
-    res.render('seller/productHeatmap', { product, blocks: blockMap });
+    res.json({ success: true, product, blocks: blockMap });
 
   } catch (err) {
     console.error("Error fetching product heatmap:", err);

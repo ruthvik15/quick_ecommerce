@@ -13,11 +13,11 @@ const {
 } = require('../controllers/sellerController');
 
 router.get('/dashboard', getDashboard);
-router.post('/product/:id/stop', stopProduct);
-router.post('/product/:id/price', updatePrice);
-router.post('/product/:id/quantity', updateQuantity);
+router.post('/product/stop/:id', stopProduct);
+router.post('/product/update-price/:id', updatePrice);
+router.post('/product/update-quantity/:id', updateQuantity);
 router.get('/add-product', renderAddPage);
-router.post('/productadd', upload.single("image"), uploadProduct);
+router.post('/product/add', upload.single("image"), uploadProduct);
 router.get('/:sellerId/product/:productId/heatmap', getProductHeatmap);
 
 module.exports = router;
