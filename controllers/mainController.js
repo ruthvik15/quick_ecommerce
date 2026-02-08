@@ -18,11 +18,13 @@ const setLocation = (req, res) => {
 };
 
 const renderHome = async (req, res) => {
-  // If user role check is needed for redirection, handle in frontend or specific auth route
-  // The API should just return data
-
   const selectedLocation = req.query.location || req.cookies.selectedLocation || req.user?.location || "hyderabad";
-  const { category, sort } = req.query;
+  const { category, sort, page = 1, limit = 10 } = req.query;
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
+
   const filter = { location: selectedLocation, status: { $ne: "stopped" } };
   const sortOption = {};
 
@@ -34,7 +36,8 @@ const renderHome = async (req, res) => {
   else if (sort === "high-low") sortOption.price = -1;
   else if (sort === "newest") sortOption.createdAt = -1;
 
-  const cacheKey = `products:${selectedLocation}:${category || "all"}:${sort || "default"}`;
+  // Cache key includes pagination params
+  const cacheKey = `products:${selectedLocation}:${category || "all"}:${sort || "default"}:${pageNum}:${limitNum}`;
   const cached = await getCache(cacheKey);
 
   if (cached) {
@@ -45,25 +48,39 @@ const renderHome = async (req, res) => {
     });
   }
 
-  const products = await Product.find(filter).sort(sortOption);
+  // Fetch limit+1 to check if there's a next page
+  const products = await Product.find(filter)
+    .sort(sortOption)
+    .skip(skip)
+    .limit(limitNum + 1);
+
+  // Check if there's a next page
+  const hasNextPage = products.length > limitNum;
+
+  // Return only the requested limit
+  const paginatedProducts = hasNextPage ? products.slice(0, limitNum) : products;
+
   const categories = ["All Products", "groceries", "electronics", "clothing", "food"];
 
-  await setCache(cacheKey, {
-    products,
+  const responseData = {
+    products: paginatedProducts,
     categories,
     selectedLocation,
     selectedCategory: category || "",
     selectedSort: sort || "",
-  });
+    pagination: {
+      currentPage: pageNum,
+      limit: limitNum,
+      hasNextPage
+    }
+  };
+
+  await setCache(cacheKey, responseData);
 
   res.json({
     success: true,
-    products,
-    categories,
-    user: req.user,
-    selectedLocation,
-    selectedCategory: category || "",
-    selectedSort: sort || "",
+    ...responseData,
+    user: req.user
   });
 };
 const getLogin = (req, res) => {
@@ -157,8 +174,6 @@ const logout = (req, res) => {
 };
 
 const trackOrders = async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
   const now = new Date();
   const slotStartHours = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
 
@@ -310,7 +325,11 @@ const handleSearchPost = async (req, res) => {
 
 // 🔎 GET /search (search results + filter/sort)
 const handleSearchGet = async (req, res) => {
-  const { searchQuery = "", category, sort } = req.query;
+  const { searchQuery = "", category, sort, page = 1, limit = 10 } = req.query;
+
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skip = (pageNum - 1) * limitNum;
 
   const safeQuery = escapeRegex(searchQuery.trim());
   let query = { name: new RegExp(safeQuery, "i") };
@@ -325,16 +344,32 @@ const handleSearchGet = async (req, res) => {
   else if (sort === "newest") sortOption.createdAt = -1;
 
   try {
-    const products = await Product.find(query).sort(sortOption);
+    // Fetch limit+1 to check if there's a next page
+    const products = await Product.find(query)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limitNum + 1);
+
+    // Check if there's a next page
+    const hasNextPage = products.length > limitNum;
+
+    // Return only the requested limit
+    const paginatedProducts = hasNextPage ? products.slice(0, limitNum) : products;
+
     res.json({
       success: true,
-      products,
       query: searchQuery,
+      products: paginatedProducts,
       selectedCategory: category || "",
-      selectedSort: sort || ""
+      selectedSort: sort || "",
+      pagination: {
+        currentPage: pageNum,
+        limit: limitNum,
+        hasNextPage
+      }
     });
   } catch (err) {
-    console.error("GET Search failed:", err);
+    console.error("Search query failed:", err);
     res.status(500).json({ error: "Server error" });
   }
 };

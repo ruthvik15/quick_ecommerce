@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require("../middleware/auth");
 const upload = require("../utils/s3Uploader");
 
 const {
@@ -11,6 +12,9 @@ const {
   uploadProduct,
   getProductHeatmap
 } = require('../controllers/sellerController');
+
+// All seller routes require authentication
+router.use(requireAuth);
 
 router.get('/dashboard', getDashboard);
 router.post('/product/stop/:id', stopProduct);

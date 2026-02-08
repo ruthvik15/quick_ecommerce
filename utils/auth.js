@@ -14,7 +14,6 @@ function createtoken(user){
         address:user.address,
         latitude:user.latitude,
         longitude:user.longitude
-
     }
       if (user.role) {
     payload.role = user.role; // for users

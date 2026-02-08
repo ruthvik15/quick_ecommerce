@@ -7,8 +7,6 @@ const razorpay = require("../utils/razorpay");
 const crypto = require("crypto");
 
 async function showCheckoutPage(req, res) {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
   const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
 
   if (!cart || cart.items.length === 0) {

@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const router = Router();
+const { requireAuth } = require("../middleware/auth");
 const {
   getCart,
   removeFromCart,
@@ -7,6 +8,9 @@ const {
   increaseQuantity,
   decreaseQuantity
 } = require("../controllers/cartController");
+
+// All cart routes require authentication
+router.use(requireAuth);
 
 router.get("/", getCart);
 router.post("/remove", removeFromCart);

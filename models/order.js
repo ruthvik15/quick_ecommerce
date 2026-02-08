@@ -1,49 +1,6 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-// const orderSchema = new Schema({
-//   product_id: {
-//     type: Schema.Types.ObjectId,
-//     ref: "Product",
-//     required: true
-//   },
-//   user_id: {
-//     type: Schema.Types.ObjectId,
-//     ref: "User",
-//     required: true
-//   },
-//   rider_id: {
-//     type: Schema.Types.ObjectId,
-//     ref: "Rider",
-//   },
-//   total: {  
-//     type: Number,
-//     required: true
-//   },
-//   location: {
-//     type: String,
-//     enum: ["hyderabad", "bengaluru", "mumbai", "delhi"],
-//     required: true
-//   },
-//   status: {  // Added status tracking
-//     type: String,
-//     enum: ["pending", "confirmed", "shipped", "delivered", "cancelled"],
-//     default: "pending"
-//   },
-//   quantity: {  
-//     type: Number,
-//     required: true,
-//     min: 1
-//   }
-// }, { timestamps: true });
-// orderSchema.index({ user_id: 1 }); // Index for user orders
-// orderSchema.index({ rider_id: 1 }); // Index for rider assignments
-// orderSchema.index({ status: 1 }); // Index for status queries
-// orderSchema.index({ location: 1, createdAt: -1 }); // Compound index for location/time queries
-
-
-// const Order = mongoose.model("Order", orderSchema);
-// module.exports = Order;
 const orderSchema = new Schema({
   product_id: { 
     type: Schema.Types.ObjectId, 
@@ -83,13 +40,12 @@ const orderSchema = new Schema({
       required: true },
    paid: {
        type: Boolean,
-        default: false // COD by default
+        default: false 
 },
   status: { type: String,
      enum: [ "confirmed", "accepted", "delivered","out-for-delivery" ,"cancelled","missed"], 
      default: "confirmed" },
 
-  // 🆕 Slot info
   deliveryDate: { 
     type: Date,
      required: true }, // Format: YYYY-MM-DD

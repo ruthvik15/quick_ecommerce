@@ -6,6 +6,8 @@ import endpoints from "../api/endpoints";
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
     const [searchQuery, setSearchQuery] = useState("");
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
     const [cartCount, setCartCount] = useState(0);
     const navigate = useNavigate();
 
@@ -23,11 +25,41 @@ const Navbar = () => {
         }
     }, [user]);
 
+    useEffect(() => {
+        const fetchSuggestions = async () => {
+            if (searchQuery.trim().length < 2) {
+                setSuggestions([]);
+                return;
+            }
+
+            try {
+                const res = await fetch(`${endpoints.products.searchSuggestions}?q=${encodeURIComponent(searchQuery)}`, {
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                setSuggestions(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error("Error fetching suggestions:", err);
+                setSuggestions([]);
+            }
+        };
+
+        const debounceTimer = setTimeout(fetchSuggestions, 300);
+        return () => clearTimeout(debounceTimer);
+    }, [searchQuery]);
+
     const handleSearch = (e) => {
         e.preventDefault();
         if (searchQuery.trim()) {
-            navigate(`/search?searchQuery=${encodeURIComponent(searchQuery)}`);
+            navigate(`/search?query=${encodeURIComponent(searchQuery)}`);
+            setShowSuggestions(false);
         }
+    };
+
+    const handleSuggestionClick = (suggestion) => {
+        setSearchQuery(suggestion);
+        navigate(`/search?query=${encodeURIComponent(suggestion)}`);
+        setShowSuggestions(false);
     };
 
     return (
@@ -43,10 +75,25 @@ const Navbar = () => {
                         placeholder="Search for products..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => setShowSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     />
                     <button type="submit">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     </button>
+                    {showSuggestions && suggestions.length > 0 && (
+                        <div className="search-suggestions">
+                            {suggestions.map((suggestion, idx) => (
+                                <div
+                                    key={idx}
+                                    className="suggestion-item"
+                                    onClick={() => handleSuggestionClick(suggestion)}
+                                >
+                                    {suggestion}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </form>
 
                 <div className="nav-links">
