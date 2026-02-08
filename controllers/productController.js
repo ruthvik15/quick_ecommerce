@@ -25,8 +25,6 @@ const getProductDetail = async (req, res) => {
 
 
 const postReview = async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'You must be logged in to review' });
-
   const { comment, rating } = req.body;
   const productId = req.params.id;
 

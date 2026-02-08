@@ -10,7 +10,7 @@ import OrderSuccess from "./pages/OrderSuccess";
 import SellerDashboard from "./pages/SellerDashboard";
 import RiderDashboard from "./pages/RiderDashboard";
 import MyOrders from "./pages/MyOrders";
-import SearchPage from "./pages/SearchPage";
+import SearchPage from "./pages/searchPage";
 
 function App() {
   return (

@@ -2,8 +2,6 @@ const Cart = require("../models/cart");
 const Product = require("../models/product");
 
 async function getCart(req, res) {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
   const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
   res.json({ success: true, cart, user: req.user });
 }
@@ -18,8 +16,6 @@ async function removeFromCart(req, res) {
 
 async function addToCart(req, res) {
   try {
-    if (!req.user) return res.status(401).json({ error: "Please login to add items to cart" });
-
     const userId = req.user._id;
     const { productId } = req.body;
     if (!productId) return res.status(400).json({ error: "Product ID is required" });

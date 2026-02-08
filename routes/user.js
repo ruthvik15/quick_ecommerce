@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { requireAuth } = require("../middleware/auth");
 const { setLocation,
   renderHome,
   login,
@@ -9,31 +10,32 @@ const { setLocation,
   cancelOrder,
   trackSingleOrder,
   handleSearchPost,
-
-  handleSearchGet, getLogin,
+  handleSearchGet, 
+  getLogin,
   getSignup,
-
   searchSuggestions, } = require("../controllers/mainController");
+
+// Public routes - no auth required
+router.route("/login")
+    .get(getLogin)
+    .post(login);
+router.route("/signup")
+    .get(getSignup)
+    .post(signup);
+router.route("/search")
+    .get(handleSearchGet)
+    .post(handleSearchPost);
 router.get("/set-location", setLocation);
 router.get("/", renderHome);
-router.get("/login", getLogin);
-router.get("/signup", getSignup);
-router.get("/profile", (req, res) => {
-  if (req.user) {
-    res.json({ success: true, user: req.user });
-  } else {
-    res.status(401).json({ success: false, error: "Unauthorized" });
-  }
+router.get("/logout", requireAuth, logout);
+router.get("/search-suggestions", searchSuggestions);
+
+// Protected routes - require authentication
+router.get("/profile", requireAuth, (req, res) => {
+  res.json({ success: true, user: req.user });
 });
-router.post("/login", login);
-router.post("/signup", signup);
-router.get("/logout", logout);
-router.get("/trackorders", trackOrders);
-router.post("/orders/cancel/:id", cancelOrder);
-router.get("/trackorders/:orderId", trackSingleOrder);
-router.get("/search", handleSearchGet);
-router.post("/search", handleSearchPost);
-router.get("/search-suggestions", searchSuggestions,
-);
+router.get("/trackorders", requireAuth, trackOrders);
+router.post("/cancel-order", requireAuth, cancelOrder);
+router.get("/trackorders/:orderId", requireAuth, trackSingleOrder);
 
 module.exports = router;

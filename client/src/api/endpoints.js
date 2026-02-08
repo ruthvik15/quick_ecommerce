@@ -11,6 +11,7 @@ const endpoints = {
         getAll: `${API_BASE_URL}/product/all`,
         detail: `${API_BASE_URL}/product`, // UI adds /id
         search: `${API_BASE_URL}/search`,  // UI adds ?searchQuery=...
+        searchSuggestions: `${API_BASE_URL}/search-suggestions`, // UI adds ?q=...
         addReview: `${API_BASE_URL}/product/review`,
         base: API_BASE_URL,
     },

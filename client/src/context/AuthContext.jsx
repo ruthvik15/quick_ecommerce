@@ -11,8 +11,14 @@ export const AuthProvider = ({ children }) => {
         const checkSession = async () => {
             try {
                 const res = await fetch(endpoints.auth.profile, { credentials: "include" });
-                const data = await res.json();
 
+                // 1. Check if the request was actually successful (status 200-299)
+                if (!res.ok) {
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                }
+                const data = await res.json();
                 if (data.success) {
                     setUser(data.user);
                 } else {
@@ -35,7 +41,10 @@ export const AuthProvider = ({ children }) => {
 
     const logout = async () => {
         try {
-            await fetch(endpoints.auth.logout, { credentials: "include" });
+            await fetch(endpoints.auth.logout, {
+                method: "POST",
+                credentials: "include"
+            });
         } catch (err) {
             console.error("Logout request failed:", err);
         } finally {

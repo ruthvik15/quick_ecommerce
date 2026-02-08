@@ -1,8 +1,9 @@
 // routes/riderRoutes.js
 const express = require("express");
 const router = express.Router();
+const { requireAuth } = require("../middleware/auth");
 
-const{ acceptOrder,
+const { acceptOrder,
   rejectOrder,
   getDashboard,
   signupRider,
@@ -15,13 +16,17 @@ const{ acceptOrder,
   getAcceptedOrders,
   getCompletedOrders,
   getUnacceptedOrders,
-  updateOrderSlot}=require("../controllers/riderController");
+  updateOrderSlot } = require("../controllers/riderController");
 
-// Rider routes
+// Public route - rider signup
+router.post("/signup", signupRider);
+
+// All other rider routes require authentication
+router.use(requireAuth);
+
 router.post("/orders/accept", acceptOrder);
 router.post("/orders/reject", rejectOrder);
 router.get("/dashboard", getDashboard);
-router.post("/signup", signupRider);
 router.post("/:id/location", updateLocationById);
 router.post("/update-location", updateLocation);
 router.get("/orders/pending", getPendingOrders);

@@ -1,8 +1,7 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cookieParser = require("cookie-parser");
 const path = require('path');
-require("dotenv").config();
+
 const User = require("./models/user");
 const Cart = require("./models/cart")
 const userrouter = require("./routes/user")
@@ -12,68 +11,26 @@ const checkoutroute = require("./routes/checkout")
 const cartrouter = require("./routes/cart")
 const productroute = require("./routes/product")
 const { checkcookie } = require("./middleware/auth");
-const redis = require("redis");
 const app = express();
-mongoose.connect(process.env.MONGO_DB_URI).then((e) => { console.log("connected") })
+const cors = require('cors');
+const { connectRedis } = require("./utils/redisClient");
+const connectToMongoDb = require("./utils/dbConnection");
+require("dotenv").config();
 
 // Middleware
-app.use(cookieParser());
-const cors = require('cors');
+
 app.use(cors({
-  origin: 'http://localhost:5173', // Vite default port
+  origin: process.env.FRONTEND_URL,
   credentials: true
 }));
-app.use(checkcookie("token"));
 app.use(express.json());
+app.use(cookieParser());
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(checkcookie("token"));
 
-// app.set('view engine', 'ejs');
-// app.set('views', path.join(__dirname, 'views_old'));
-
-// const redisClient = redis.createClient({
-//    socket: {
-//     host: "redis", 
-//     port: 6379
-//   }
-// });
-
-// redisClient.connect().then(() => {
-//   console.log("✅ Redis connected");
-// }).catch((err) => {
-//   console.error("❌ Redis Error:", err);
-// });
-
-// Middleware for legacy EJS views (Disabled for React Migration)
-/*
-app.use((req, res, next) => {
-  let selectedLocation;
-
-  // If logged in, give priority to user location
-  if (req.user) {
-    selectedLocation = req.user.location;
-  } else if (req.cookies.selectedLocation) {
-    selectedLocation = req.cookies.selectedLocation;
-  } else {
-    selectedLocation = "Hyderabad";
-  }
-
-  res.locals.selectedLocation = selectedLocation;
-  next();
-});
-
-app.use(async (req, res, next) => {
-  if (req.user && req.user.role === "user") {
-    const cart = await Cart.findOne({ user: req.user._id });
-    res.locals.cartItemCount = cart ? cart.items.length : 0;
-  } else {
-    res.locals.cartItemCount = 0;
-  }
-  next();
-});
-*/
 // Routes
 app.use("/", userrouter)
 app.use("/cart", cartrouter);
@@ -84,6 +41,17 @@ app.use("/product", productroute)
 
 require('./utils/locationsync');
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
+startServer();
+async function startServer() {
+  try {
+    await connectToMongoDb();
+    await connectRedis();
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server Startup Error:", error);
+    process.exit(1);
+  }
+}

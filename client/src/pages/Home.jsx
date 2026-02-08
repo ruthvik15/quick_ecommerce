@@ -8,20 +8,34 @@ const Home = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [page, setPage] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const location = useLocation();
 
-    const fetchProducts = async () => {
-        setLoading(true);
+    const fetchProducts = async (pageNum = 1, append = false) => {
+        if (append) {
+            setLoadingMore(true);
+        } else {
+            setLoading(true);
+        }
+
         try {
-            // Pass the current search/filter params to the backend
-            const query = location.search;
-            const res = await fetch(`${endpoints.products.base}/${query}`, {
+            const searchParams = new URLSearchParams(location.search);
+            searchParams.set('page', pageNum);
+
+            const res = await fetch(`${endpoints.products.base}/?${searchParams.toString()}`, {
                 credentials: 'include'
             });
             const data = await res.json();
 
             if (data.success) {
-                setProducts(data.products || []);
+                if (append) {
+                    setProducts(prev => [...prev, ...(data.products || [])]);
+                } else {
+                    setProducts(data.products || []);
+                }
+                setHasNextPage(data.pagination?.hasNextPage || false);
             } else {
                 setError("Failed to load products");
             }
@@ -30,12 +44,20 @@ const Home = () => {
             setError("Error connecting to server");
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
 
     useEffect(() => {
-        fetchProducts();
+        setPage(1);
+        fetchProducts(1, false);
     }, [location.search]);
+
+    const handleLoadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchProducts(nextPage, true);
+    };
 
     return (
         <>
@@ -61,11 +83,25 @@ const Home = () => {
                         <p>Try adjusting your search or filters.</p>
                     </div>
                 ) : (
-                    <div className="products-grid">
-                        {products.map((product) => (
-                            <ProductCard key={product._id} product={product} />
-                        ))}
-                    </div>
+                    <>
+                        <div className="products-grid">
+                            {products.map((product) => (
+                                <ProductCard key={product._id} product={product} />
+                            ))}
+                        </div>
+
+                        {hasNextPage && (
+                            <div className="pagination-controls">
+                                <button
+                                    onClick={handleLoadMore}
+                                    className="btn-load-more"
+                                    disabled={loadingMore}
+                                >
+                                    {loadingMore ? "Loading..." : "Load More"}
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </>

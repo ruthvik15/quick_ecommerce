@@ -9,13 +9,16 @@ const SearchPage = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [page, setPage] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
 
     useEffect(() => {
         const fetchProducts = async () => {
             setLoading(true);
             setError(null);
+            setPage(1);
 
-            // Parse query parameter properly
             const searchParams = new URLSearchParams(location.search);
             const query = searchParams.get('query');
 
@@ -26,13 +29,15 @@ const SearchPage = () => {
             }
 
             try {
-                const res = await fetch(`${endpoints.products.search}?searchQuery=${encodeURIComponent(query)}`, {
+                searchParams.set('page', 1);
+                const res = await fetch(`${endpoints.products.search}?${searchParams.toString()}`, {
                     credentials: 'include'
                 });
                 const data = await res.json();
 
                 if (data.success) {
                     setProducts(data.products || []);
+                    setHasNextPage(data.pagination?.hasNextPage || false);
                 } else {
                     setError(data.error || "No products found");
                 }
@@ -46,6 +51,31 @@ const SearchPage = () => {
 
         fetchProducts();
     }, [location.search]);
+
+    const handleLoadMore = async () => {
+        setLoadingMore(true);
+        const nextPage = page + 1;
+
+        const searchParams = new URLSearchParams(location.search);
+        searchParams.set('page', nextPage);
+
+        try {
+            const res = await fetch(`${endpoints.products.search}?${searchParams.toString()}`, {
+                credentials: 'include'
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                setProducts(prev => [...prev, ...(data.products || [])]);
+                setHasNextPage(data.pagination?.hasNextPage || false);
+                setPage(nextPage);
+            }
+        } catch (err) {
+            console.error("Load more error:", err);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
 
     return (
         <>
@@ -63,11 +93,25 @@ const SearchPage = () => {
                         <p>Try adjusting your search query.</p>
                     </div>
                 ) : (
-                    <div className="products-grid">
-                        {products.map(product => (
-                            <ProductCard key={product._id} product={product} />
-                        ))}
-                    </div>
+                    <>
+                        <div className="products-grid">
+                            {products.map(product => (
+                                <ProductCard key={product._id} product={product} />
+                            ))}
+                        </div>
+
+                        {hasNextPage && (
+                            <div className="pagination-controls">
+                                <button
+                                    onClick={handleLoadMore}
+                                    className="btn-load-more"
+                                    disabled={loadingMore}
+                                >
+                                    {loadingMore ? "Loading..." : "Load More"}
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </>
