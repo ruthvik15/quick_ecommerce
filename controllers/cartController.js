@@ -13,6 +13,8 @@ async function removeFromCart(req, res) {
 
   cart.items = cart.items.filter(item => item.product._id.toString() !== productId);
   await cart.save();
+  // Populate after save
+  await cart.populate("items.product");
   res.json({ success: true, cart });
 }
 
@@ -21,6 +23,18 @@ async function addToCart(req, res) {
     const userId = req.user._id;
     const { productId } = req.body;
     if (!productId) return res.status(400).json({ error: "Product ID is required" });
+
+    // Validate product exists and has stock
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    if (product.status === "stopped" || product.status === "sold") {
+      return res.status(400).json({ error: "Product is no longer available" });
+    }
+    if (product.quantity < 1) {
+      return res.status(400).json({ error: "Product is out of stock" });
+    }
 
     let cart = await Cart.findOne({ user: userId });
 
@@ -34,6 +48,10 @@ async function addToCart(req, res) {
     } else {
       const index = cart.items.findIndex(item => item.product.toString() === productId);
       if (index >= 0) {
+        // Check stock before increasing quantity
+        if (cart.items[index].quantity >= product.quantity) {
+          return res.status(400).json({ error: "Cannot add more, stock limit reached" });
+        }
         cart.items[index].quantity += 1;
       } else {
         cart.items.push({ product: productId, quantity: 1 });
@@ -54,9 +72,24 @@ async function increaseQuantity(req, res) {
   const { productId } = req.body;
   const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
   const item = cart.items.find(i => i.product._id.toString() === productId);
-  if (item && item.quantity < item.product.quantity) {
+  
+  if (item) {
+    // FIXED BUG #15: Reload product to get latest stock (race condition mitigation)
+    const freshProduct = await Product.findById(productId);
+    if (!freshProduct) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    if (freshProduct.status === "stopped" || freshProduct.status === "sold") {
+      return res.status(400).json({ error: "Product is no longer available" });
+    }
+    if (item.quantity >= freshProduct.quantity) {
+      return res.status(400).json({ error: "Stock limit reached" });
+    }
+    
     item.quantity++;
     await cart.save();
+    // Populate after save
+    await cart.populate("items.product");
   }
   res.json({ success: true, cart });
 }
@@ -72,20 +105,12 @@ async function decreaseQuantity(req, res) {
     if (item.quantity > 1) {
       item.quantity--;
     } else {
-      // If quantity is 1 and we decrease, remove it?
-      // User request says: "once added to cart dont show + again show - number + ."
-      // and typically - on 1 removes it.
-      // But let's check if the existing frontend logic expects removal on 0 or checks > 1.
-      // Cart.jsx: disabled={item.quantity <= 1}
-      // So Frontend prevents decreasing below 1.
-      // However, ProductCard.jsx (future) might want to remove it.
-      // For now, let's keep it > 0 but populate the result.
-      // Actually, standard behavior is remove on 0. But Cart page explicitly disables the button at 1.
-      // So I will just fix the populate for now to solve the NaN bug.
-      // Refactoring `decreaseQuantity` to remove items is part of Phase 15. I'll stick to fixing bugs here.
-      item.quantity--;
+      // Remove item when quantity reaches 0
+      cart.items.splice(itemIndex, 1);
     }
     await cart.save();
+    // Populate after save
+    await cart.populate("items.product");
   }
   res.json({ success: true, cart });
 }

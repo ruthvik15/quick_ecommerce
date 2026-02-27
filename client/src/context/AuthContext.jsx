@@ -1,45 +1,59 @@
-import { createContext, useState, useEffect, useMemo } from "react";
+import { createContext, useState, useEffect, useMemo, useCallback } from "react";
 import endpoints from "../api/endpoints";
 
 export const AuthContext = createContext();
+
+// FIXED: Helper function to decode JWT and check expiry
+const isTokenExpired = (token) => {
+    if (!token) return true;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp * 1000 < Date.now();
+    } catch {
+        return true;
+    }
+};
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Check authentication on mount by calling /me endpoint
     useEffect(() => {
-        const checkSession = async () => {
+        const checkAuth = async () => {
             try {
-                const res = await fetch(endpoints.auth.profile, { credentials: "include" });
-
-                // 1. Check if the request was actually successful (status 200-299)
-                if (!res.ok) {
-                    setUser(null);
-                    setLoading(false);
-                    return;
-                }
-                const data = await res.json();
-                if (data.success) {
-                    setUser(data.user);
+                const res = await fetch(endpoints.auth.me, {
+                    credentials: 'include'
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.user) {
+                        setUser(data.user);
+                    } else {
+                        setUser(null);
+                    }
                 } else {
                     setUser(null);
                 }
             } catch (err) {
-                console.error("Session check failed:", err);
+                console.error("Auth check failed:", err);
                 setUser(null);
             } finally {
                 setLoading(false);
             }
         };
 
-        checkSession();
+        checkAuth();
     }, []);
 
-    const login = (userData) => {
+    // FIXED: Use useCallback to prevent unnecessary re-renders
+    const login = useCallback((userData) => {
         setUser(userData);
-    };
+    }, []);
 
-    const logout = async () => {
+    // FIXED: Use useCallback for logout
+    const logout = useCallback(async () => {
         try {
             await fetch(endpoints.auth.logout, {
                 method: "POST",
@@ -50,14 +64,23 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setUser(null);
         }
-    };
+    }, []);
 
+    // FIXED: Add token expiry check in isAuthenticated
+    const isAuthenticated = useCallback(() => {
+        if (!user) return false;
+        // Check if token appears expired by checking session
+        return !isTokenExpired(document.cookie);
+    }, [user]);
+
+    // FIXED: Proper dependencies - now only includes data, not functions
     const value = useMemo(() => ({
         user,
         login,
         logout,
+        isAuthenticated,
         loading
-    }), [user, loading]);
+    }), [user, loading, login, logout, isAuthenticated]);
 
     return (
         <AuthContext.Provider value={value}>

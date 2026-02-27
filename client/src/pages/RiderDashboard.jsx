@@ -1,18 +1,30 @@
 import { useState, useEffect, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
+import useRiderLocationTracking from "../hooks/useRiderLocationTracking";
 
 const RiderDashboard = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading: authLoading } = useContext(AuthContext);
+    const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [orders, setOrders] = useState({}); // Stores grouped orders
     const [activeTab, setActiveTab] = useState("pending"); // pending, accepted, history
     const [loading, setLoading] = useState(true);
+    
+    // Global clock-synced location tracking (works across all rider pages)
+    useRiderLocationTracking();
 
     const fetchStats = async () => {
         try {
             const res = await fetch(endpoints.rider.riderDashboard, { credentials: "include" });
+            
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+            
             const data = await res.json();
             if (data.success) setStats(data);
         } catch (err) { console.error(err); }
@@ -27,6 +39,12 @@ const RiderDashboard = () => {
             else if (tab === "history") url = endpoints.rider.historyOrders;
 
             const res = await fetch(url, { credentials: "include" });
+            
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+            
             const data = await res.json();
             if (data.success) {
                 // Normalize data to always be an object (grouped by date usually)
@@ -37,9 +55,14 @@ const RiderDashboard = () => {
     };
 
     useEffect(() => {
+        if (authLoading) return;
+        if (!user || user.role !== 'rider') {
+            navigate('/login');
+            return;
+        }
         fetchStats();
         fetchOrders(activeTab);
-    }, [activeTab]);
+    }, [activeTab, user, authLoading, navigate]);
 
     const handleOrderAction = async (action, orderId) => {
         try {
@@ -49,17 +72,26 @@ const RiderDashboard = () => {
             if (action === "out-for-delivery") url = endpoints.rider.outForDelivery;
             if (action === "delivered") url = endpoints.rider.completeOrder;
 
-            await fetch(url, {
+            const res = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ orderId }),
                 credentials: "include"
             });
 
-            // Refresh data
-            fetchStats();
-            fetchOrders(activeTab);
-        } catch (err) { console.error(err); }
+            const data = await res.json();
+            
+            if (data.success) {
+                // Refresh data
+                fetchStats();
+                fetchOrders(activeTab);
+            } else {
+                alert(data.error || "Action failed");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Network error. Please try again.");
+        }
     };
 
     const renderOrders = () => {

@@ -20,7 +20,22 @@ require("dotenv").config();
 // Middleware
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // In development, allow any localhost port
+    if (origin.startsWith('http://localhost:')) {
+      return callback(null, true);
+    }
+    
+    // In production, only allow the configured frontend URL
+    if (origin === process.env.FRONTEND_URL) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());

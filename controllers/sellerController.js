@@ -1,18 +1,51 @@
+const mongoose = require('mongoose');
 const Product = require('../models/product');
 const Order = require('../models/order');
-const { delCache } = require("../utils/cache");
+const { delCache, delCachePattern } = require("../utils/cache");
 
 async function invalidateProductCaches(product) {
   const location = product.location.toLowerCase();
-  const categories = ['all', product.category.toLowerCase()];
+  const productCategory = product.category.toLowerCase();
   const sorts = ['default', 'low-high', 'high-low', 'newest'];
 
-  for (const cat of categories) {
-    for (const sort of sorts) {
-      const key = `products:${location}:${cat}:${sort}`;
-      await delCache(key);
+  // Smart cache invalidation for page-wise caching strategy
+  // Only invalidate:
+  // 1. Pages 1-5 of "all" category (where users spend time)
+  // 2. Pages 1-5 of product's specific category
+  // 3. All 4 sort variations
+  // This keeps memory low while ensuring fresh data where it matters
+  
+  const maxCachedPages = 5; // Only these pages are cached
+  const limit = 20; // Match frontend limit
+
+  for (const sort of sorts) {
+    // Invalidate "all" category pages 1-5
+    for (let page = 1; page <= maxCachedPages; page++) {
+      const allCategoryKey = `products:${location}:all:${sort}:page:${page}:${limit}`;
+      await delCache(allCategoryKey);
+      console.log(`🗑️  Cleared: ${allCategoryKey}`);
+    }
+    
+    // Invalidate product's specific category pages 1-5
+    for (let page = 1; page <= maxCachedPages; page++) {
+      const categoryKey = `products:${location}:${productCategory}:${sort}:page:${page}:${limit}`;
+      await delCache(categoryKey);
+      console.log(`🗑️  Cleared: ${categoryKey}`);
     }
   }
+  
+  console.log(`✅ Invalidated pages 1-5 for location: ${location}, category: ${productCategory}`);
+}
+
+async function invalidateSearchCaches(location) {
+  // Clear search result caches when product changes
+  // Search results use pattern: search:location:query:category:sort:page:limit
+  // Since we don't know which search queries were executed, we clear by location
+  // This is trade-off: slightly broader invalidation vs. not invalidating per-query
+  
+  const pattern = `search:${location.toLowerCase()}:*`;
+  const count = await delCachePattern(pattern);
+  console.log(`✅ Invalidated ${count} search cache keys for location: ${location}`);
 }
 
 async function getDashboard(req, res) {
@@ -23,7 +56,7 @@ async function getDashboard(req, res) {
 
     const soldCounts = await Order.aggregate([
       { $match: { status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] } } },
-      { $group: { _id: '$product_id', totalSold: { $sum: '$quantity' } } }
+      { $group: { _id: '$productId', totalSold: { $sum: '$quantity' } } }
     ]);
 
     const soldMap = soldCounts.reduce((map, p) => {
@@ -55,11 +88,28 @@ async function getDashboard(req, res) {
 async function stopProduct(req, res) {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, { status: 'stopped' });
-    if (product) await invalidateProductCaches(product);
+    if (product) {
+      await invalidateProductCaches(product);
+      await invalidateSearchCaches(product.location);
+    }
     res.json({ success: true, message: "Product stopped" });
   } catch (error) {
     console.error('Error stopping product:', error);
     res.status(500).json({ error: 'Error stopping product.' });
+  }
+}
+
+async function resumeProduct(req, res) {
+  try {
+    const product = await Product.findByIdAndUpdate(req.params.id, { status: 'live' });
+    if (product) {
+      await invalidateProductCaches(product);
+      await invalidateSearchCaches(product.location);
+    }
+    res.json({ success: true, message: "Product is now live" });
+  } catch (error) {
+    console.error('Error resuming product:', error);
+    res.status(500).json({ error: 'Error resuming product.' });
   }
 }
 
@@ -76,6 +126,7 @@ async function updatePrice(req, res) {
 
     await Product.findByIdAndUpdate(product._id, { price: newPrice });
     await invalidateProductCaches(product);
+    await invalidateSearchCaches(product.location);
     res.json({ success: true, message: "Price updated" });
   } catch (error) {
     console.error('Error updating price:', error);
@@ -96,6 +147,7 @@ async function updateQuantity(req, res) {
 
     await Product.findByIdAndUpdate(product._id, { quantity: newQty });
     await invalidateProductCaches(product);
+    await invalidateSearchCaches(product.location);
     res.json({ success: true, message: "Quantity updated" });
   } catch (error) {
     console.error('Error updating quantity:', error);
@@ -129,6 +181,7 @@ async function uploadProduct(req, res) {
     });
 
     await invalidateProductCaches(product);
+    await invalidateSearchCaches(product.location);
     res.json({ success: true, message: "Product created", product });
   } catch (error) {
     console.error("Product upload failed:", error);
@@ -138,28 +191,44 @@ async function uploadProduct(req, res) {
 
 async function getDashboardTrackSection(req,res){
   try {
-    const {sellerId} = req.params;
-    const orders = await Order.find({seller:sellerId})
-    const totalRevenue = orders.reduce((total, order) => total + order.totalAmount, 0);
+    const sellerId = req.user._id; // Get from authenticated user instead of params
+    
+    // Get seller's products first
+    const sellerProducts = await Product.find({ seller: sellerId }).select('_id');
+    const productIds = sellerProducts.map(p => p._id);
+    
+    // Find orders for those products
+    const orders = await Order.find({ 
+      productId: { $in: productIds },
+      status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] }
+    });
+    
+    const totalRevenue = orders.reduce((total, order) => total + order.total, 0);
     const totalOrders = orders.length;
-    // const averageOrderValue = totalRevenue / totalOrders;
-    const totalProductsLive = await Product.countDocuments({seller:sellerId})
-    const totalProductsStopped = await Product.countDocuments({seller:sellerId, status:'stopped'})
-    const totalProducts = totalProductsLive + totalProductsStopped ;
-    const totalProductsSold = await Product.countDocuments({seller:sellerId, status:'sold'})
-    const activeProducts = totalProducts - totalProductsSold;
-    res.json({success:true,
-      orders,
-      totalRevenue,
-      totalOrders,
-      totalProductsLive,
-      totalProducts,
-      totalProductsSold,
-      activeProducts
-    })
+    
+    const totalProductsLive = await Product.countDocuments({seller:sellerId, status: 'live'});
+    const totalProductsStopped = await Product.countDocuments({seller:sellerId, status:'stopped'});
+    const totalProducts = totalProductsLive + totalProductsStopped;
+    
+    // Count delivered orders as sold products
+    const totalProductsSold = orders.filter(o => o.status === 'delivered').length;
+    const activeProducts = totalProductsLive;
+    
+    res.json({
+      success: true,
+      trackSection: {
+        orders,
+        totalRevenue,
+        totalOrders,
+        totalProductsLive,
+        totalProducts,
+        totalProductsSold,
+        activeProducts
+      }
+    });
   } catch (error) {
-    console.log("error fetching dashboard section tracking details");
-    res.json({success:false,error:error})
+    console.error("error fetching dashboard section tracking details:", error);
+    res.status(500).json({success:false,error:error.message});
   }
 }
 
@@ -178,7 +247,7 @@ async function getProductHeatmap(req, res) {
     const ordersByBlock = await Order.aggregate([
       {
         $match: {
-          product_id: new mongoose.Types.ObjectId(productId),
+          productId: new mongoose.Types.ObjectId(productId),
           createdAt: { $gte: oneDayAgo },
           status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] }
         }
@@ -213,15 +282,44 @@ async function getProductHeatmap(req, res) {
   }
 }
 
+//Add missing delete product endpoint with proper cache invalidation
+async function deleteProduct(req, res) {
+  try {
+    const product = await Product.findById(req.params.id);
+    
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found.' });
+    }
 
+    // Verify seller owns this product
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to delete this product.' });
+    }
+
+    // Delete from database
+    await Product.findByIdAndDelete(req.params.id);
+
+    // CRITICAL: Clear cache for this location to prevent deleted product from showing
+    await invalidateProductCaches(product);
+    await invalidateSearchCaches(product.location);
+
+    console.log(`✅ Product ${product._id} deleted by seller ${req.user._id}`);
+    res.json({ success: true, message: 'Product deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: 'Error deleting product.' });
+  }
+}
 
 module.exports = {
   getDashboard,
   stopProduct,
+  resumeProduct,
   updatePrice,
   updateQuantity,
   renderAddPage,
   uploadProduct,
+  deleteProduct,
   getProductHeatmap,
   getDashboardTrackSection
 };

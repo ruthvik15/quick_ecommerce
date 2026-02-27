@@ -10,7 +10,14 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,  
     required: true,
-    unique: true
+    unique: true,
+    // email validation - simple check for @ and valid domains (gmail, outlook, etc)
+    validate: {
+      validator: function(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); // Basic email format: name@domain.com
+      },
+      message: 'Please provide a valid email address'
+    }
   },
   password: {
     type: String,
@@ -28,6 +35,7 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
+    unique: true, // Ensure phone numbers are unique to prevent duplicates
   },
   address: {
     type: String
@@ -59,7 +67,12 @@ userSchema.static("matchPassword", async function (email, plainPassword) {
   const isMatch = await bcrypt.compare(plainPassword, user.password);
   if (!isMatch) throw new Error("Incorrect password");
 
-  return createtoken(user);
+  // Return both token and sanitized user (no password exposure)
+  const token = createtoken(user);
+  const sanitizedUser = user.toObject();
+  delete sanitizedUser.password; // Remove password from returned object
+  
+  return { token, user: sanitizedUser };
 });
 
 const User = mongoose.model("User", userSchema);

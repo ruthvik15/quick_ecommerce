@@ -1,7 +1,7 @@
 // routes/riderRoutes.js
 const express = require("express");
 const router = express.Router();
-const { requireAuth } = require("../middleware/auth");
+const { requireRole } = require("../middleware/auth");
 
 const { acceptOrder,
   rejectOrder,
@@ -19,8 +19,8 @@ const { acceptOrder,
   getOrderDetails } = require("../controllers/riderController");
 
 
-// All rider routes require authentication
-router.use(requireAuth);
+// All rider routes require authentication and rider role
+router.use(requireRole('rider'));
 
 router.post("/orders/accept", acceptOrder);
 router.post("/orders/reject", rejectOrder);

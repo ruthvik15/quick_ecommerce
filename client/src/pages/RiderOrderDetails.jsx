@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
+import useRiderLocationTracking from "../hooks/useRiderLocationTracking";
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -22,14 +23,24 @@ L.Icon.Default.mergeOptions({
 const RiderOrderDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user, loading: authLoading } = useContext(AuthContext);
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    
+    // Global clock-synced location tracking (shared with RiderDashboard)
+    useRiderLocationTracking();
 
     useEffect(() => {
         const fetchOrderDetails = async () => {
             try {
-                const res = await fetch(`${endpoints.rider.orderDetail}/${id}`, { credentials: "include" });
+                const res = await fetch(endpoints.rider.orderDetail(id), { credentials: "include" });
+                
+                if (res.status === 401) {
+                    navigate("/login");
+                    return;
+                }
+                
                 const data = await res.json();
                 if (data.success) {
                     setOrder(data.order);
@@ -63,11 +74,16 @@ const RiderOrderDetails = () => {
 
             if (data.success) {
                 // Refresh data
-                const res2 = await fetch(`${endpoints.rider.orderDetail}/${id}`, { credentials: "include" });
+                const res2 = await fetch(endpoints.rider.orderDetail(id), { credentials: "include" });
                 const data2 = await res2.json();
                 if (data2.success) setOrder(data2.order);
+            } else {
+                alert(data.error || "Action failed");
             }
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            alert("Network error. Please try again.");
+        }
     };
 
     if (loading) return <><Navbar /><div className="container" style={{ paddingTop: '2rem' }}>Loading details...</div></>;

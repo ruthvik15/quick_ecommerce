@@ -1,21 +1,37 @@
 import { useState, useEffect, useContext } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import Toast from "../components/Toast";
 import { AuthContext } from "../context/AuthContext";
+import { CartContext } from "../context/CartContext";
 import endpoints from "../api/endpoints";
 
 const ProductDetail = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { fetchCart } = useContext(CartContext);
     const [product, setProduct] = useState(null);
     const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [toast, setToast] = useState(null);
+
+    // Redirect riders and sellers to their dashboards
+    useEffect(() => {
+        if (user) {
+            if (user.role === 'rider') {
+                navigate('/rider/dashboard');
+            } else if (user.role === 'seller') {
+                navigate('/seller/dashboard');
+            }
+        }
+    }, [user, navigate]);
 
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const res = await fetch(`${endpoints.products.detail}/${id}`, {
+                const res = await fetch(endpoints.products.detail(id), {
                     credentials: 'include'
                 });
                 const data = await res.json();
@@ -36,8 +52,6 @@ const ProductDetail = () => {
         fetchProduct();
     }, [id]);
 
-    const navigate = useNavigate();
-
     const addToCart = async () => {
         try {
             if (!user) {
@@ -51,9 +65,10 @@ const ProductDetail = () => {
             });
             const data = await res.json();
             if (data.success) {
-                alert("Added to cart!");
+                fetchCart();
+                setToast({ message: "Added to cart!", type: "success" });
             } else {
-                alert(data.error);
+                setToast({ message: data.error, type: "error" });
             }
         } catch (err) {
             console.error(err);
@@ -66,6 +81,13 @@ const ProductDetail = () => {
     return (
         <>
             <Navbar />
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
             <div className="container product-detail-container">
                 <div className="detail-image-container">
                     <img src={product.image || "https://placehold.co/600x400"} alt={product.name} />
@@ -101,7 +123,7 @@ const ProductDetail = () => {
                             <ul className="reviews-list">
                                 {reviews.map(r => (
                                     <li key={r._id} style={{ padding: '1rem 0', borderBottom: '1px solid #eee' }}>
-                                        <strong>{r.user_id?.name || 'User'}</strong>: {r.comment} ({r.rating}⭐)
+                                        <strong>{r.userId?.name || 'User'}</strong>: {r.comment} ({r.rating}⭐)
                                     </li>
                                 ))}
                             </ul>

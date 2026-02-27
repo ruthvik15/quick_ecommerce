@@ -26,7 +26,7 @@ async function showCheckoutPage(req, res) {
   }
 
   // Get last used address/coords for this user
-  const lastOrder = await Order.findOne({ user_id: req.user._id })
+  const lastOrder = await Order.findOne({ userId: req.user._id })
     .sort({ createdAt: -1 });
 
   const cityData = cityCoords[firstLocation] || cityCoords["hyderabad"];
@@ -41,7 +41,7 @@ async function showCheckoutPage(req, res) {
       address: lastOrder.address,
       lat: lastOrder.lat,
       lng: lastOrder.lng,
-      phone: lastOrder.ph_number
+      phone: lastOrder.phoneNumber
     } : null,
     razorpayKeyId: process.env.RAZORPAY_KEY_ID
   });
@@ -88,9 +88,9 @@ async function processCheckout(req, res) {
         });
 
         await Order.create({
-          product_id: product._id,
+          productId: product._id,
           name: product.name,
-          user_id: userId,
+          userId: userId,
           quantity: item.quantity,
           total: product.price * item.quantity,
           location: req.user.location,
@@ -100,7 +100,7 @@ async function processCheckout(req, res) {
           lng: parseFloat(longitude),
           status: "confirmed",
           address,
-          ph_number: phone
+          phoneNumber: phone
         });
       }
 
@@ -169,9 +169,9 @@ async function verifyPayment(req, res) {
       });
 
       await Order.create({
-        product_id: product._id,
+        productId: product._id,
         name: product.name,
-        user_id: userId,
+        userId: userId,
         quantity: item.quantity,
         total: product.price * item.quantity,
         location: req.user.location,
@@ -183,7 +183,7 @@ async function verifyPayment(req, res) {
         paid: true,
         razorpay_payment_id,
         address,
-        ph_number: phone
+        phoneNumber: phone
       });
     }
 

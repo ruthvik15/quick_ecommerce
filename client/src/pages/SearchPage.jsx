@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
 import endpoints from "../api/endpoints";
@@ -7,6 +7,7 @@ import { AuthContext } from "../context/AuthContext";
 
 const SearchPage = () => {
     const { user } = useContext(AuthContext);
+    const navigate = useNavigate();
     const location = useLocation();
     const [products, setProducts] = useState([]);
     const [cartItems, setCartItems] = useState({});
@@ -15,6 +16,17 @@ const SearchPage = () => {
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+
+    // Redirect riders and sellers to their dashboards
+    useEffect(() => {
+        if (user) {
+            if (user.role === 'rider') {
+                navigate('/rider/dashboard');
+            } else if (user.role === 'seller') {
+                navigate('/seller/dashboard');
+            }
+        }
+    }, [user, navigate]);
 
     // Fetch Cart to sync quantities
     const fetchCart = async () => {

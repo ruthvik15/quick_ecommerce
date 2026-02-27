@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 const orderSchema = new Schema({
-  product_id: { 
+  productId: { 
     type: Schema.Types.ObjectId, 
     ref: "Product", 
     required: true
@@ -12,17 +12,17 @@ const orderSchema = new Schema({
        ref: "Product",
 
    },
-   ph_number:{
+   phoneNumber:{
       type:Number,
    },
    address: {
   type: String,
 },
-  user_id: {
+  userId: {
      type: Schema.Types.ObjectId,
      ref: "User",
      required: true },
-  rider_id: {
+  riderId: {
      type: Schema.Types.ObjectId, 
      ref: "Rider" 
     },
@@ -56,13 +56,31 @@ const orderSchema = new Schema({
     lat: { type: Number },
 lng: { type: Number },
 ignoredBy: [{
-  type: Schema.Types.ObjectId,
-  ref: "Rider"
+  riderId: { type: Schema.Types.ObjectId, ref: "Rider", required: true },
+  rejectedAt: { type: Date, default: Date.now }
 }],
 razorpay_payment_id: { type: String }
 
 }, { timestamps: true });
 
-orderSchema.index({ product_id: 1, createdAt: -1,status: 1  });
+//Add critical indexes for frequently queried fields
+// Rider gets pending orders filtered by status and deliveryDate
+orderSchema.index({ status: 1, deliveryDate: 1 });
+// For user order tracking
+orderSchema.index({ userId: 1, createdAt: -1 });
+// Legacy index - keep for backward compatibility but note field name changed
+orderSchema.index({ productId: 1, createdAt: -1, status: 1 });
+
+//TTL cleanup for ignoredBy array - remove rejections older than 1 hour
+// Prevents array growth when riders repeatedly reject orders
+orderSchema.index({ "ignoredBy.rejectedAt": 1 }, { sparse: true, expireAfterSeconds: 3600 });
+
+// Pre-save hook: Clean expired rejections as fallback (in case TTL index doesn't trigger)
+orderSchema.pre('save', function(next) {
+  const oneHourAgo = new Date(Date.now() - 3600000);
+  this.ignoredBy = this.ignoredBy.filter(rejection => rejection.rejectedAt > oneHourAgo);
+  next();
+});
+
 const Order = mongoose.model("Order", orderSchema);
 module.exports = Order;

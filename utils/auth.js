@@ -3,6 +3,12 @@ require("dotenv").config();
 
 const secret = process.env.JWT_SECRET;
 
+
+if (!secret) {
+  console.error('ERROR: JWT_SECRET not configured in environment variables');
+  process.exit(1);
+}
+
 const ALLOWED_FIELDS = [
   "_id",
   "name",
@@ -13,7 +19,7 @@ const ALLOWED_FIELDS = [
   "address",  
   "latitude", 
   "longitude", 
-  "vehicle_type"  // Only for Rider
+  "vehicle_type"  
 ];
 
 function createtoken(user) {
@@ -30,8 +36,22 @@ function createtoken(user) {
 
 function validatetoken(token) {
   try {
+    if (!token) {
+      const error = new Error('No token provided');
+      error.name = 'NoTokenError';
+      throw error;
+    }
     return JWT.verify(token, secret);
   } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      throw new Error('Token expired');
+    } else if (error.name === 'JsonWebTokenError') {
+      throw new Error('Invalid token');
+    } else if (error.name === 'NoTokenError') {
+      throw error;
+    } else {
+      console.error('Unexpected token validation error:', error);
+    }
     return null;
   }
 }

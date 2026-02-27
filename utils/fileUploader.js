@@ -12,7 +12,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: "quick_ecommerce_products", // Folder name in Cloudinary
+    folder: "quick_ecommerce_products",
     allowed_formats: ["jpg", "png", "jpeg", "webp"],
     transformation: [
       {
@@ -27,7 +27,22 @@ const storage = new CloudinaryStorage({
   },
 });
 
-const upload = multer({ storage: storage });
+// FIXED: Add file size limits (5MB) and server-side file type validation
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // FIXED: Validate file type on server side as backup security measure
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: jpg, png, webp`));
+    }
+  }
+});
 console.log("Cloudinary Storage Configured");
 
 // Fallback to local storage - disabled for now 

@@ -61,7 +61,12 @@ sellerSchema.static("matchPassword", async function (email, plainPassword) {
   const isMatch = await bcrypt.compare(plainPassword, seller.password);
   if (!isMatch) throw new Error("Incorrect password");
 
-  return createtoken(seller);
+  //Return both token and sanitized seller (no password exposure)
+  const token = createtoken(seller);
+  const sanitizedSeller = seller.toObject();
+  delete sanitizedSeller.password; // Remove password from returned object
+  
+  return { token, user: sanitizedSeller };
 });
 
 const Seller = mongoose.model("Seller", sellerSchema);

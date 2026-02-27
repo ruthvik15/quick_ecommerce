@@ -5,11 +5,16 @@ import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
 
 const SellerDashboard = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading: authLoading } = useContext(AuthContext);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
-    const [dashboardTrackSection, setDashboardTrackSection] = useState([]);
+    const [dashboardTrackSection, setDashboardTrackSection] = useState({
+        totalProducts: 0,
+        totalProductsSold: 0,
+        totalRevenue: 0,
+        activeProducts: 0
+    });
     const navigate = useNavigate();
 
     // Add Product Form State
@@ -20,6 +25,12 @@ const SellerDashboard = () => {
     const fetchDashboard = async () => {
         try {
             const res = await fetch(endpoints.seller.sellerDashboard, { credentials: "include" });
+            
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+            
             const data = await res.json();
 
             if (data.success) {
@@ -37,6 +48,12 @@ const SellerDashboard = () => {
     const fetchDashboardTrackSection = async () => {
         try {
             const res = await fetch(endpoints.seller.dashboardTrackSection, { credentials: "include" });
+            
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+            
             const data = await res.json();
 
             if (data.success) {
@@ -52,17 +69,36 @@ const SellerDashboard = () => {
     };
 
     useEffect(() => {
+        if (authLoading) return;
+        if (!user || user.role !== 'seller') {
+            navigate('/login');
+            return;
+        }
         fetchDashboard();
         fetchDashboardTrackSection();
-    }, [user, navigate]);
+    }, [user, authLoading, navigate]);
 
     const handleStopProduct = async (id) => {
-        await fetch(`${endpoints.seller.stopProduct}/${id}`, { method: "POST", credentials: "include" });
+        await fetch(endpoints.seller.stopProduct(id), { method: "POST", credentials: "include" });
         fetchDashboard();
     };
 
-    const handleUpdate = async (id, type, change) => {
-        const url = type === 'price' ? `${endpoints.seller.updatePrice}/${id}` : `${endpoints.seller.updateQuantity}/${id}`;
+    const handleResumeProduct = async (id) => {
+        await fetch(endpoints.seller.resumeProduct(id), { method: "POST", credentials: "include" });
+        fetchDashboard();
+    };
+
+    const handleDirectUpdate = async (id, type, newValue) => {
+        // Find the product to calculate the change
+        const product = products.find(p => p._id === id);
+        if (!product) return;
+
+        const currentValue = type === 'price' ? product.price : product.quantity;
+        const change = newValue - currentValue;
+        
+        if (change === 0) return; // No change
+
+        const url = type === 'price' ? endpoints.seller.updatePrice(id) : endpoints.seller.updateQuantity(id);
         await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -130,9 +166,14 @@ const SellerDashboard = () => {
                         <h1>Seller Dashboard</h1>
                         <p style={{ color: 'var(--text-sub)' }}>Manage your inventory and track sales</p>
                     </div>
-                    <button className="btn-primary" onClick={() => setShowAddForm(!showAddForm)}>
-                        {showAddForm ? "Close Form" : "+ Add New Product"}
-                    </button>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button className="btn-secondary" onClick={() => navigate('/seller/heatmap')}>
+                            📊 View Heatmap
+                        </button>
+                        <button className="btn-primary" onClick={() => setShowAddForm(!showAddForm)}>
+                            {showAddForm ? "Close Form" : "+ Add New Product"}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Stats Grid */}
@@ -150,7 +191,7 @@ const SellerDashboard = () => {
                         <p>Total Items Sold</p>
                     </div>
                     <div className="stat-card highlight">
-                        <h3>₹{totalRevenue.toLocaleString()}</h3>
+                        <h3>₹{(totalRevenue || 0).toLocaleString()}</h3>
                         <p>Total Revenue</p>
                     </div>
                 </div>
@@ -215,45 +256,102 @@ const SellerDashboard = () => {
                         </thead>
                         <tbody>
                             {products.map(product => (
-                                <tr key={product._id}>
+                                <tr key={product._id} className={product.status === 'stopped' ? 'product-row-stopped' : ''}>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                            <img src={product.image} alt={product.name} className="table-img" />
-                                            <span style={{ fontWeight: '500' }}>{product.name}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            ₹{product.price}
-                                            <div className="action-column">
-                                                <button onClick={() => handleUpdate(product._id, 'price', 10)} className="btn-micro">▲</button>
-                                                <button onClick={() => handleUpdate(product._id, 'price', -10)} className="btn-micro">▼</button>
+                                            <img src={product.image} alt={product.name} className="table-img" style={product.status === 'stopped' ? { opacity: 0.5 } : {}} />
+                                            <div>
+                                                <span style={{ fontWeight: '500' }}>{product.name}</span>
+                                                {product.status === 'stopped' && (
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>🔴 Not available for sale</div>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
                                     <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span>{product.quantity} left</span>
-                                            <span className="text-sub">({product.sold || 0} sold)</span>
-                                            <div className="action-column">
-                                                <button onClick={() => handleUpdate(product._id, 'qty', 1)} className="btn-micro">+</button>
-                                                <button onClick={() => handleUpdate(product._id, 'qty', -1)} className="btn-micro">-</button>
+                                        {product.status !== 'stopped' ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                <span style={{ fontSize: '0.9rem', color: '#64748b' }}>₹</span>
+                                                <input 
+                                                    type="number" 
+                                                    defaultValue={product.price}
+                                                    onBlur={(e) => {
+                                                        const newVal = parseFloat(e.target.value);
+                                                        if (newVal && newVal > 0) {
+                                                            handleDirectUpdate(product._id, 'price', newVal);
+                                                        } else {
+                                                            e.target.value = product.price;
+                                                        }
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') e.target.blur();
+                                                    }}
+                                                    style={{
+                                                        width: '90px',
+                                                        padding: '0.4rem 0.6rem',
+                                                        border: '1px solid #e2e8f0',
+                                                        borderRadius: '0.375rem',
+                                                        fontSize: '0.9rem',
+                                                        outline: 'none'
+                                                    }}
+                                                />
                                             </div>
+                                        ) : (
+                                            <span style={{ color: '#94a3b8' }}>₹{product.price}</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            {product.status !== 'stopped' ? (
+                                                <>
+                                                    <input 
+                                                        type="number" 
+                                                        defaultValue={product.quantity}
+                                                        onBlur={(e) => {
+                                                            const newVal = parseInt(e.target.value);
+                                                            if (newVal >= 0) {
+                                                                handleDirectUpdate(product._id, 'qty', newVal);
+                                                            } else {
+                                                                e.target.value = product.quantity;
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') e.target.blur();
+                                                        }}
+                                                        style={{
+                                                            width: '70px',
+                                                            padding: '0.4rem 0.6rem',
+                                                            border: '1px solid #e2e8f0',
+                                                            borderRadius: '0.375rem',
+                                                            fontSize: '0.9rem',
+                                                            outline: 'none'
+                                                        }}
+                                                    />
+                                                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>left</span>
+                                                    <span className="text-sub">({product.sold || 0} sold)</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span style={{ color: '#94a3b8' }}>{product.quantity} left</span>
+                                                    <span className="text-sub">({product.sold || 0} sold)</span>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                     <td>
-                                        <span className={`status-badge ${product.status}`}>
-                                            {product.status === 'active' ? '● Active' : '○ Stopped'}
+                                        <span className={`status-badge ${product.status === 'live' ? 'active' : 'stopped'}`}>
+                                            {product.status === 'live' ? '✓ Live' : '⊗ Stopped'}
                                         </span>
                                     </td>
                                     <td>
-                                        {product.status !== 'stopped' && (
+                                        {product.status !== 'stopped' ? (
                                             <button onClick={() => handleStopProduct(product._id)} className="btn-danger-outline btn-sm">
                                                 Stop Sale
                                             </button>
-                                        )}
-                                        {product.status === 'stopped' && (
-                                            <span className="text-sub" style={{ fontSize: '0.9rem' }}>Stopped</span>
+                                        ) : (
+                                            <button onClick={() => handleResumeProduct(product._id)} className="btn-success-outline btn-sm">
+                                                ✓ Resume Sale
+                                            </button>
                                         )}
                                     </td>
                                 </tr>
