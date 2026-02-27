@@ -40,17 +40,20 @@ const endpoints = {
         updatePrice: `${API_BASE_URL}/seller/product/update-price`, // UI adds /id
         updateQuantity: `${API_BASE_URL}/seller/product/update-quantity`, // UI adds /id
         heatmap: `${API_BASE_URL}/seller`, // Complex path
+        dashboardTrackSection: `${API_BASE_URL}/seller/dashboard-track-section`,
     },
     rider: {
         riderDashboard: `${API_BASE_URL}/rider/dashboard`,
         pendingOrders: `${API_BASE_URL}/rider/orders/pending`,
         todayOrders: `${API_BASE_URL}/rider/orders/today`,
+        acceptedOrders: `${API_BASE_URL}/rider/orders/accepted`,
         historyOrders: `${API_BASE_URL}/rider/orders/history`,
-        acceptOrder: `${API_BASE_URL}/rider/order/accept`,
-        rejectOrder: `${API_BASE_URL}/rider/order/reject`,
-        outForDelivery: `${API_BASE_URL}/rider/order/out-for-delivery`,
-        completeOrder: `${API_BASE_URL}/rider/order/complete`,
-        updateStatus: `${API_BASE_URL}/rider/order`, // UI adds /id/status
+        acceptOrder: `${API_BASE_URL}/rider/orders/accept`,
+        rejectOrder: `${API_BASE_URL}/rider/orders/reject`,
+        outForDelivery: `${API_BASE_URL}/rider/orders/out-for-delivery`,
+        completeOrder: `${API_BASE_URL}/rider/orders/complete`,
+        updateStatus: `${API_BASE_URL}/rider/orders`, // UI adds /id/status
+        orderDetail: `${API_BASE_URL}/rider/orders/details`, // UI adds /id
     }
 };
 

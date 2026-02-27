@@ -1,12 +1,14 @@
 import { useState, useEffect, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
 
 const MyOrders = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading: authLoading } = useContext(AuthContext);
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
     const fetchOrders = async () => {
         try {
@@ -14,6 +16,8 @@ const MyOrders = () => {
             const data = await res.json();
             if (data.success) {
                 setOrders(data.orders);
+            } else if (data.error === "Unauthorized") {
+                navigate("/login");
             }
         } catch (err) {
             console.error("Error fetching orders:", err);
@@ -23,8 +27,13 @@ const MyOrders = () => {
     };
 
     useEffect(() => {
-        if (user) fetchOrders();
-    }, [user]);
+        if (authLoading) return;
+        if (!user) {
+            navigate("/login");
+            return;
+        }
+        fetchOrders();
+    }, [user, authLoading, navigate]);
 
     const handleCancel = async (orderId) => {
         if (!confirm("Are you sure you want to cancel this order?")) return;
@@ -47,7 +56,7 @@ const MyOrders = () => {
         }
     };
 
-    if (loading) return <><Navbar /><div className="container">Loading orders...</div></>;
+    if (loading || authLoading) return <><Navbar /><div className="container">Loading orders...</div></>;
 
     return (
         <>

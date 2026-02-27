@@ -136,6 +136,33 @@ async function uploadProduct(req, res) {
   }
 }
 
+async function getDashboardTrackSection(req,res){
+  try {
+    const {sellerId} = req.params;
+    const orders = await Order.find({seller:sellerId})
+    const totalRevenue = orders.reduce((total, order) => total + order.totalAmount, 0);
+    const totalOrders = orders.length;
+    // const averageOrderValue = totalRevenue / totalOrders;
+    const totalProductsLive = await Product.countDocuments({seller:sellerId})
+    const totalProductsStopped = await Product.countDocuments({seller:sellerId, status:'stopped'})
+    const totalProducts = totalProductsLive + totalProductsStopped ;
+    const totalProductsSold = await Product.countDocuments({seller:sellerId, status:'sold'})
+    const activeProducts = totalProducts - totalProductsSold;
+    res.json({success:true,
+      orders,
+      totalRevenue,
+      totalOrders,
+      totalProductsLive,
+      totalProducts,
+      totalProductsSold,
+      activeProducts
+    })
+  } catch (error) {
+    console.log("error fetching dashboard section tracking details");
+    res.json({success:false,error:error})
+  }
+}
+
 async function getProductHeatmap(req, res) {
   try {
     const { sellerId, productId } = req.params;
@@ -195,5 +222,6 @@ module.exports = {
   updateQuantity,
   renderAddPage,
   uploadProduct,
-  getProductHeatmap
+  getProductHeatmap,
+  getDashboardTrackSection
 };

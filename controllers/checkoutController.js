@@ -108,6 +108,10 @@ async function processCheckout(req, res) {
       return res.json({ success: true, redirect: "/checkout/orders/success" });
     }
 
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: "Razorpay keys are missing in server configuration." });
+    }
+
     const amount = cart.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     const razorOrder = await razorpay.orders.create({
       amount: amount * 100,
@@ -126,7 +130,7 @@ async function processCheckout(req, res) {
     });
   } catch (err) {
     console.error("Checkout error:", err);
-    res.status(500).json({ error: "Something went wrong during checkout" });
+    res.status(500).json({ error: err.message || "Something went wrong during checkout" });
   }
 }
 

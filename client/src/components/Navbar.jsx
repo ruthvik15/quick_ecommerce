@@ -1,29 +1,16 @@
 import { useState, useEffect, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
+import { CartContext } from "../context/CartContext";
 import endpoints from "../api/endpoints";
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
+    const { cartCount } = useContext(CartContext);
     const [searchQuery, setSearchQuery] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [cartCount, setCartCount] = useState(0);
     const navigate = useNavigate();
-
-    useEffect(() => {
-        if (user && user.role === 'user') {
-            fetch(endpoints.cart.getCart, { credentials: "include" })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success && data.cart) {
-                        const count = data.cart.items.reduce((acc, item) => acc + item.quantity, 0);
-                        setCartCount(count);
-                    }
-                })
-                .catch(err => console.error("Error fetching cart count:", err));
-        }
-    }, [user]);
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -66,7 +53,7 @@ const Navbar = () => {
         <nav className="navbar">
             <div className="container navbar-content">
                 <Link to="/" className="brand-logo">
-                    QuickKart
+                    Quick Kart
                 </Link>
 
                 <form onSubmit={handleSearch} className="search-bar">
@@ -102,12 +89,14 @@ const Navbar = () => {
                     {user ? (
                         <>
                             {user.role === 'user' && (
-                                <Link to="/cart" className="nav-item cart-link">
-                                    Cart
-                                    {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
-                                </Link>
+                                <>
+                                    <Link to="/cart" className="nav-item cart-link">
+                                        Cart
+                                        {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+                                    </Link>
+                                    <Link to="/orders" className="nav-item">My Orders</Link>
+                                </>
                             )}
-                            <Link to="/orders" className="nav-item">My Orders</Link>
                             {user.role === 'seller' && <Link to="/seller/dashboard" className="nav-item">Dashboard</Link>}
                             {user.role === 'rider' && <Link to="/rider/dashboard" className="nav-item">Dashboard</Link>}
 

@@ -9,26 +9,32 @@ import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import SellerDashboard from "./pages/SellerDashboard";
 import RiderDashboard from "./pages/RiderDashboard";
+import RiderOrderDetails from "./pages/RiderOrderDetails";
 import MyOrders from "./pages/MyOrders";
 import SearchPage from "./pages/searchPage";
+
+import { CartProvider } from "./context/CartContext";
 
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/order-success" element={<OrderSuccess />} />
-          <Route path="/seller/dashboard" element={<SellerDashboard />} />
-          <Route path="/rider/dashboard" element={<RiderDashboard />} />
-          <Route path="/orders" element={<MyOrders />} />
-        </Routes>
+        <CartProvider>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
+            <Route path="/seller/dashboard" element={<SellerDashboard />} />
+            <Route path="/rider/dashboard" element={<RiderDashboard />} />
+            <Route path="/rider/orders/:id" element={<RiderOrderDetails />} />
+            <Route path="/orders" element={<MyOrders />} />
+          </Routes>
+        </CartProvider>
       </AuthProvider>
     </Router>
   );

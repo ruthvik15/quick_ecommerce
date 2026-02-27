@@ -10,7 +10,7 @@ const { setLocation,
   cancelOrder,
   trackSingleOrder,
   handleSearchPost,
-  handleSearchGet, 
+  handleSearchGet,
   searchSuggestions, } = require("../controllers/mainController");
 
 // Public routes no auth is required
@@ -20,11 +20,11 @@ router.get("/set-location", setLocation);
 router.get("/", renderHome);
 router.get("/search-suggestions", searchSuggestions);
 router.route("/search")
-    .get(handleSearchGet)
-    .post(handleSearchPost);
+  .get(handleSearchGet)
+  .post(handleSearchPost);
 
 // Protected routes - require authentication
-router.get("/logout", requireAuth, logout);
+router.post("/logout", requireAuth, logout);
 router.get("/profile", requireAuth, (req, res) => {
   res.json({ success: true, user: req.user });
 });

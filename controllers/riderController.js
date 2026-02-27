@@ -363,9 +363,13 @@ const getAcceptedOrders = async (req, res) => {
         _id: order._id,
         productName: order.product_id?.name,
         userName: order.user_id?.name,
+        ph_number: order.ph_number || order.user_id?.phone,
         address: order.user_id?.address,
+        userLocation: order.user_id?.location,
         deliverySlot: order.deliverySlot,
-        status: order.status
+        status: order.status,
+        payment: order.paid ? "Prepaid" : "COD",
+        amount: order.product_id?.price
       });
     });
 
@@ -402,9 +406,13 @@ const getCompletedOrders = async (req, res) => {
         _id: order._id,
         productName: order.product_id?.name,
         userName: order.user_id?.name,
+        ph_number: order.ph_number || order.user_id?.phone, // Phone fallback
         address: order.user_id?.address,
+        userLocation: order.user_id?.location, // Map string or coords if available
         deliverySlot: order.deliverySlot,
-        status: order.status
+        status: order.status,
+        payment: order.paid ? "Prepaid" : "COD",
+        amount: order.product_id?.price // Useful to show amount to collect
       });
     });
 
@@ -462,6 +470,46 @@ const updateOrderSlot = async (req, res) => {
   }
 };
 
+// Get order details
+const getOrderDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id)
+      .populate("user_id", "name email phone address location")
+      .populate("product_id", "name price image description duration category");
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found" });
+    }
+
+    if (order.status !== 'confirmed' && order.rider_id && order.rider_id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    res.json({
+      success: true,
+      order: {
+        _id: order._id,
+        product: order.product_id,
+        user: order.user_id,
+        deliverySlot: order.deliverySlot,
+        status: order.status,
+        paymentMode: order.paid ? "Prepaid" : "COD",
+        amount: order.product_id?.price,
+        orderDate: order.orderDate,
+        ph_number: order.ph_number || order.user_id?.phone,
+        latitude: order.lat || order.user_id?.latitude,
+        longitude: order.lng || order.user_id?.longitude,
+        address: order.address || order.user_id?.address
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching order details:", error);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+};
+
 // Export all controller methods
 module.exports = {
   acceptOrder,
@@ -477,5 +525,6 @@ module.exports = {
   getAcceptedOrders,
   getCompletedOrders,
   getUnacceptedOrders,
-  updateOrderSlot
+  updateOrderSlot,
+  getOrderDetails
 };
