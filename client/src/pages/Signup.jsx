@@ -12,9 +12,12 @@ const Signup = () => {
         location: "hyderabad",
         role: "user",
         vehicle_type: "bike",
+        address: "",   // Added for Seller/Rider
+        shopName: ""   // Added for Seller
     });
+    
     const [error, setError] = useState("");
-    const { login } = useContext(AuthContext); // Can auto-login after signup
+    const { login } = useContext(AuthContext); 
     const navigate = useNavigate();
 
     const handleChange = (e) => {
@@ -75,8 +78,6 @@ const Signup = () => {
                         <input name="phone" onChange={handleChange} required />
                     </div>
 
-
-
                     <div className="form-group">
                         <label>Location</label>
                         <select name="location" value={formData.location} onChange={handleChange}>
@@ -90,12 +91,41 @@ const Signup = () => {
                     <div className="form-group">
                         <label>Role</label>
                         <select name="role" value={formData.role} onChange={handleChange}>
-                            <option value="user">User</option>
-                            <option value="seller">Seller</option>
-                            <option value="rider">Rider</option>
+                            <option value="user">User (Customer)</option>
+                            <option value="seller">Seller (Shop Owner)</option>
+                            <option value="rider">Rider (Delivery Partner)</option>
                         </select>
                     </div>
 
+                    {/* --- CONDITIONAL FIELDS --- */}
+
+                    {/* 1. Shop Name: Only for SELLERS */}
+                    {formData.role === "seller" && (
+                        <div className="form-group">
+                            <label>Shop Name</label>
+                            <input 
+                                name="shopName" 
+                                placeholder="e.g. Fresh Mart"
+                                onChange={handleChange} 
+                                required // Mandatory for Seller
+                            />
+                        </div>
+                    )}
+
+                    {/* 2. Address: Mandatory for SELLERS and RIDERS */}
+                    {(formData.role === "seller" || formData.role === "rider") && (
+                        <div className="form-group">
+                            <label>Address {formData.role === "seller" ? "(Pickup Location)" : "(Base Location)"}</label>
+                            <textarea 
+                                name="address" 
+                                placeholder="Enter full address"
+                                onChange={handleChange} 
+                                required 
+                            />
+                        </div>
+                    )}
+
+                    {/* 3. Vehicle Type: Only for RIDERS */}
                     {formData.role === "rider" && (
                         <div className="form-group">
                             <label>Vehicle Type</label>
@@ -109,6 +139,7 @@ const Signup = () => {
 
                     <button type="submit" className="btn-primary">Sign Up</button>
                 </form>
+                
                 <p className="footer-text">
                     Already have an account? <Link to="/login">Login</Link>
                 </p>

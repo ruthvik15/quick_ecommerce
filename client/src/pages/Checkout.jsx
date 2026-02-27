@@ -136,6 +136,44 @@ const Checkout = () => {
         }
     };
 
+    const [availableSlots, setAvailableSlots] = useState([]);
+
+    const timeSlots = [
+        { value: "10-12", label: "10 AM - 12 PM", startHour: 10 },
+        { value: "12-2", label: "12 PM - 2 PM", startHour: 12 },
+        { value: "2-4", label: "2 PM - 4 PM", startHour: 14 },
+        { value: "4-6", label: "4 PM - 6 PM", startHour: 16 },
+    ];
+
+    useEffect(() => {
+        const updateSlots = () => {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const selectedDate = new Date(formData.deliveryDate);
+            const isToday = selectedDate.toDateString() === now.toDateString();
+
+            const slots = timeSlots.map(slot => ({
+                ...slot,
+                available: !isToday || currentHour < slot.startHour
+            }));
+
+            setAvailableSlots(slots);
+
+            // If currently selected slot is invalid, switch to first available
+            const currentSlotValid = slots.find(s => s.value === formData.deliverySlot)?.available;
+            if (!currentSlotValid) {
+                const firstAvailable = slots.find(s => s.available);
+                if (firstAvailable) {
+                    setFormData(prev => ({ ...prev, deliverySlot: firstAvailable.value }));
+                } else {
+                    setFormData(prev => ({ ...prev, deliverySlot: "" })); // No slots available
+                }
+            }
+        };
+
+        updateSlots();
+    }, [formData.deliveryDate]);
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -198,6 +236,9 @@ const Checkout = () => {
 
                 const rzp1 = new window.Razorpay(options);
                 rzp1.open();
+            } else {
+                // Handle errors from backend (e.g., failed to create order)
+                alert(data.error || "Failed to initiate online payment.");
             }
 
         } catch (err) {
@@ -257,27 +298,28 @@ const Checkout = () => {
                             </div>
                             <div className="form-group">
                                 <label>Delivery Date</label>
-                                <input type="date" name="deliveryDate" value={formData.deliveryDate} onChange={handleChange} required />
+                                <input type="date" name="deliveryDate" min={new Date().toISOString().split('T')[0]} value={formData.deliveryDate} onChange={handleChange} required />
                             </div>
                             <div className="form-group">
                                 <label>Time Slot</label>
                                 <select name="deliverySlot" value={formData.deliverySlot} onChange={handleChange}>
-                                    <option value="10-12">10 AM - 12 PM</option>
-                                    <option value="12-2">12 PM - 2 PM</option>
-                                    <option value="2-4">2 PM - 4 PM</option>
-                                    <option value="4-6">4 PM - 6 PM</option>
+                                    {availableSlots.map(slot => (
+                                        <option key={slot.value} value={slot.value} disabled={!slot.available}>
+                                            {slot.label} {!slot.available && "(Unavailable)"}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
                             <h3>Payment Method</h3>
-                            <div className="form-group">
-                                <label>
+                            <div className="form-group payment-options">
+                                <label className="payment-option">
                                     <input type="radio" name="paymentMethod" value="online" checked={formData.paymentMethod === "online"} onChange={handleChange} />
-                                    Online Payment (Razorpay)
+                                    <span>Online Payment (Razorpay)</span>
                                 </label>
-                                <label style={{ marginLeft: '1rem' }}>
+                                <label className="payment-option">
                                     <input type="radio" name="paymentMethod" value="cod" checked={formData.paymentMethod === "cod"} onChange={handleChange} />
-                                    Cash on Delivery
+                                    <span>Cash on Delivery</span>
                                 </label>
                             </div>
 

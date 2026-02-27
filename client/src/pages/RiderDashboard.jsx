@@ -6,8 +6,8 @@ import endpoints from "../api/endpoints";
 const RiderDashboard = () => {
     const { user } = useContext(AuthContext);
     const [stats, setStats] = useState(null);
-    const [orders, setOrders] = useState([]); // This will hold the current tab's orders
-    const [activeTab, setActiveTab] = useState("pending"); // pending, today, history
+    const [orders, setOrders] = useState({}); // Stores grouped orders
+    const [activeTab, setActiveTab] = useState("pending"); // pending, accepted, history
     const [loading, setLoading] = useState(true);
 
     const fetchStats = async () => {
@@ -23,14 +23,14 @@ const RiderDashboard = () => {
         try {
             let url = "";
             if (tab === "pending") url = endpoints.rider.pendingOrders;
-            else if (tab === "today") url = endpoints.rider.todayOrders;
+            else if (tab === "accepted") url = endpoints.rider.acceptedOrders;
             else if (tab === "history") url = endpoints.rider.historyOrders;
 
             const res = await fetch(url, { credentials: "include" });
             const data = await res.json();
             if (data.success) {
-                // Normalize data structure since endpoints differ slightly
-                setOrders(data.groupedOrders || data.groupedSlots || {});
+                // Normalize data to always be an object (grouped by date usually)
+                setOrders(data.groupedOrders || {});
             }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -56,93 +56,95 @@ const RiderDashboard = () => {
                 credentials: "include"
             });
 
-            // Refresh
+            // Refresh data
             fetchStats();
             fetchOrders(activeTab);
         } catch (err) { console.error(err); }
     };
 
     const renderOrders = () => {
-        if (loading) return <p>Loading orders...</p>;
+        if (loading) return <div className="loading-spinner">Loading orders...</div>;
 
-        // Handling Pending (Grouped by Date)
-        if (activeTab === "pending") {
-            const keys = Object.keys(orders);
-            if (keys.length === 0) return <p>No pending orders.</p>;
+        const dateKeys = Object.keys(orders);
 
-            return keys.map(date => (
-                <div key={date} className="order-group">
-                    <h3>{date}</h3>
-                    {orders[date].map(order => (
-                        <div key={order._id} className="order-card-row">
-                            <div>
-                                <strong>{order.productName}</strong> ({order.deliverySlot})<br />
-                                <small>{order.userName}, {order.address}</small>
-                            </div>
-                            <div className="btn-group">
-                                <button onClick={() => handleOrderAction("accept", order._id)} className="btn-success">Accept</button>
-                                <button onClick={() => handleOrderAction("reject", order._id)} className="btn-danger">Ignore</button>
-                            </div>
-                        </div>
-                    ))}
+        if (dateKeys.length === 0) {
+            return (
+                <div className="empty-state">
+                    <p>No orders found for this section.</p>
                 </div>
-            ));
+            );
         }
 
-        // Handling Today (Grouped by Slot)
-        if (activeTab === "today") {
-            const keys = Object.keys(orders);
-            if (keys.length === 0) return <p>No orders for today.</p>;
-
-            return keys.map(slot => (
-                <div key={slot} className="order-group">
-                    <h3>Slot: {slot}</h3>
-                    {orders[slot].map(order => (
-                        <div key={order._id} className="order-card-row">
-                            <div>
-                                <strong>{order.productName}</strong><br />
-                                <small>Status: {order.status}</small>
-                            </div>
-                            <div className="btn-group">
-                                {order.status === 'accepted' && (
-                                    <button onClick={() => handleOrderAction("out-for-delivery", order._id)} className="btn-primary">Pick Up</button>
-                                )}
-                                {order.status === 'out-for-delivery' && (
-                                    <button onClick={() => handleOrderAction("delivered", order._id)} className="btn-success">Delivered</button>
-                                )}
-                            </div>
+        return dateKeys.map(date => (
+            <div key={date} className="order-group fade-in">
+                <h3 className="order-date-header">{date}</h3>
+                {orders[date].map(order => (
+                    <div key={order._id} className="order-card-row">
+                        <div className="order-info">
+                            {activeTab === 'pending' ? (
+                                <>
+                                    <h4 className="product-name">Delivery Request</h4>
+                                    <div className="order-meta">
+                                        <span>📦 Slot: <strong>{order.deliverySlot}</strong></span>
+                                        <span>📍 {order.address}</span>
+                                        <span style={{ fontSize: '0.85rem', color: 'var(--primary)', marginTop: '0.2rem' }}>
+                                            Accept to view details
+                                        </span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <h4 className="product-name">{order.productName}</h4>
+                                    <div className="order-meta">
+                                        <span>📍 {order.address}</span>
+                                        <span>📦 Slot: <strong>{order.deliverySlot}</strong></span>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    ))}
-                </div>
-            ));
-        }
 
-        // Handling History
-        if (activeTab === "history") {
-            const keys = Object.keys(orders);
-            if (keys.length === 0) return <p>No completed orders.</p>;
-            return keys.map(date => (
-                <div key={date} className="order-group">
-                    <h3>{date}</h3>
-                    {orders[date].map(order => (
-                        <div key={order._id} className="order-card-row">
-                            <div>
-                                <strong>{order.productName}</strong><br />
-                                <small>Delivered to {order.userName}</small>
-                            </div>
-                            <span className="badge-success">Completed</span>
+                        <div className="btn-group">
+                            {activeTab === 'pending' && (
+                                <>
+                                    <button onClick={() => handleOrderAction("accept", order._id)} className="btn-accept">
+                                        Accept
+                                    </button>
+                                    <button onClick={() => handleOrderAction("reject", order._id)} className="btn-ignore">
+                                        Ignore
+                                    </button>
+                                </>
+                            )}
+
+                            {activeTab === 'accepted' && (
+                                <button
+                                    onClick={() => window.location.href = `/rider/orders/${order._id}`}
+                                    className="btn-primary"
+                                    style={{ width: '100%' }}
+                                >
+                                    View Details ➝
+                                </button>
+                            )}
+
+                            {activeTab === 'history' && (
+                                <span className="status-badge delivered">Delivered</span>
+                            )}
                         </div>
-                    ))}
-                </div>
-            ));
-        }
+                    </div>
+                ))}
+            </div>
+        ));
     };
 
     return (
         <>
             <Navbar />
             <div className="container dashboard-container">
-                <h1>Rider Dashboard</h1>
+                <div className="dashboard-header">
+                    <div>
+                        <h1>Rider Dashboard</h1>
+                        <p style={{ color: 'var(--text-sub)' }}>Manage your deliveries and earnings</p>
+                    </div>
+                </div>
 
                 {stats && (
                     <div className="stats-grid">
@@ -151,20 +153,26 @@ const RiderDashboard = () => {
                             <p>Today's Deliveries</p>
                         </div>
                         <div className="stat-card">
-                            <h3>{stats.rider?.no_of_orders || 0}</h3>
-                            <p>Total Completed</p>
-                        </div>
-                        <div className="stat-card">
                             <h3>{stats.orderRequestCount || 0}</h3>
                             <p>New Requests</p>
+                        </div>
+                        <div className="stat-card">
+                            <h3>{stats.rider?.no_of_orders || 0}</h3>
+                            <p>Total Completed</p>
                         </div>
                     </div>
                 )}
 
                 <div className="tabs">
-                    <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>New Requests</button>
-                    <button className={`tab-btn ${activeTab === 'today' ? 'active' : ''}`} onClick={() => setActiveTab('today')}>Today's Tasks</button>
-                    <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>History</button>
+                    <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
+                        New Requests
+                    </button>
+                    <button className={`tab-btn ${activeTab === 'accepted' ? 'active' : ''}`} onClick={() => setActiveTab('accepted')}>
+                        Accepted Tasks
+                    </button>
+                    <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+                        History
+                    </button>
                 </div>
 
                 <div className="orders-list">

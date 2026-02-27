@@ -15,7 +15,8 @@ const { acceptOrder,
   getAcceptedOrders,
   getCompletedOrders,
   getUnacceptedOrders,
-  updateOrderSlot } = require("../controllers/riderController");
+  updateOrderSlot,
+  getOrderDetails } = require("../controllers/riderController");
 
 
 // All rider routes require authentication
@@ -34,5 +35,6 @@ router.get("/orders/accepted", getAcceptedOrders);
 router.get("/orders/completed", getCompletedOrders);
 router.get("/orders/unaccepted", getUnacceptedOrders);
 router.post("/orders/update-slot", updateOrderSlot);
+router.get("/orders/details/:id", getOrderDetails);
 
 module.exports = router;

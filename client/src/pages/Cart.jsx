@@ -2,10 +2,12 @@ import { useState, useEffect, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
+import { CartContext } from "../context/CartContext";
 import endpoints from "../api/endpoints";
 
 const Cart = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading: authLoading } = useContext(AuthContext);
+    const { fetchCart: fetchGlobalCart } = useContext(CartContext);
     const [cart, setCart] = useState(null);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
@@ -29,12 +31,13 @@ const Cart = () => {
     };
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) {
             navigate("/login");
             return;
         }
         fetchCart();
-    }, [user, navigate]);
+    }, [user, authLoading, navigate]);
 
     const updateQuantity = async (productId, action) => {
         try {
@@ -48,6 +51,7 @@ const Cart = () => {
             const data = await res.json();
             if (data.success) {
                 setCart(data.cart);
+                fetchGlobalCart(); // Sync navbar badge
             }
         } catch (err) {
             console.error("Error updating quantity", err);
@@ -65,13 +69,14 @@ const Cart = () => {
             const data = await res.json();
             if (data.success) {
                 setCart(data.cart);
+                fetchGlobalCart(); // Sync navbar badge
             }
         } catch (err) {
             console.error("Error removing item", err);
         }
     }
 
-    if (loading) return <><Navbar /><div className="container">Loading cart...</div></>;
+    if (loading || authLoading) return <><Navbar /><div className="container">Loading cart...</div></>;
 
     return (
         <>

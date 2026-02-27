@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
@@ -36,11 +36,12 @@ const ProductDetail = () => {
         fetchProduct();
     }, [id]);
 
+    const navigate = useNavigate();
+
     const addToCart = async () => {
         try {
-            if (!user) { // Assuming AuthContext provides user
-                alert("Please login to add to cart");
-                return;
+            if (!user) {
+                return navigate("/login");
             }
             const res = await fetch(endpoints.cart.addToCart, {
                 method: "POST",

@@ -10,7 +10,8 @@ const {
   updateQuantity,
   renderAddPage,
   uploadProduct,
-  getProductHeatmap
+  getProductHeatmap,
+  getDashboardTrackSection
 } = require('../controllers/sellerController');
 
 // All seller routes require authentication
@@ -23,5 +24,5 @@ router.post('/product/update-quantity/:id', updateQuantity);
 router.get('/add-product', renderAddPage);
 router.post('/product/add', upload.single("image"), uploadProduct);
 router.get('/:sellerId/product/:productId/heatmap', getProductHeatmap);
-
+router.get('/dashboard-track-section', getDashboardTrackSection);
 module.exports = router;

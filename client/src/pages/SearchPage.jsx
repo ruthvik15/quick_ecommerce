@@ -1,17 +1,55 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
 import endpoints from "../api/endpoints";
+import { AuthContext } from "../context/AuthContext";
 
 const SearchPage = () => {
+    const { user } = useContext(AuthContext);
     const location = useLocation();
     const [products, setProducts] = useState([]);
+    const [cartItems, setCartItems] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+
+    // Fetch Cart to sync quantities
+    const fetchCart = async () => {
+        if (!user) return;
+        try {
+            const res = await fetch(endpoints.cart.getCart, { credentials: 'include' });
+            const data = await res.json();
+            if (data.success && data.cart) {
+                const itemsMap = {};
+                data.cart.items.forEach(item => {
+                    itemsMap[item.product._id] = item.quantity;
+                });
+                setCartItems(itemsMap);
+            }
+        } catch (err) {
+            console.error("Failed to sync cart", err);
+        }
+    };
+
+    useEffect(() => {
+        if (user) fetchCart();
+    }, [user]);
+
+    // Callback to update local cart state when ProductCard changes it
+    const updateLocalCart = (productId, newQty) => {
+        setCartItems(prev => {
+            const updated = { ...prev };
+            if (newQty <= 0) {
+                delete updated[productId];
+            } else {
+                updated[productId] = newQty;
+            }
+            return updated;
+        });
+    };
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -96,7 +134,12 @@ const SearchPage = () => {
                     <>
                         <div className="products-grid">
                             {products.map(product => (
-                                <ProductCard key={product._id} product={product} />
+                                <ProductCard
+                                    key={product._id}
+                                    product={product}
+                                    initialQuantity={cartItems[product._id] || 0}
+                                    onUpdateCart={updateLocalCart}
+                                />
                             ))}
                         </div>
 
