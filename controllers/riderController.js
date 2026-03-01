@@ -27,7 +27,7 @@ const acceptOrder = async (req, res) => {
       return res.status(400).json({ error: "Order not available" });
     }
 
-    order.rider_id = req.user._id;
+    order.riderId = req.user._id;
     order.status = "accepted";
     await order.save();
 
@@ -48,9 +48,13 @@ const rejectOrder = async (req, res) => {
       return res.status(400).json({ error: "Order not found or already processed." });
     }
 
-    // Prevent duplicate ignores
-    if (!order.ignoredBy.includes(req.user._id)) {
-      order.ignoredBy.push(req.user._id);
+    // Prevent duplicate ignores - check if rider already rejected this order
+    const alreadyRejected = order.ignoredBy.some(rejection => 
+      rejection.riderId.toString() === req.user._id.toString()
+    );
+    
+    if (!alreadyRejected) {
+      order.ignoredBy.push({ riderId: req.user._id, rejectedAt: new Date() });
       await order.save();
     }
 
@@ -70,7 +74,7 @@ const getDashboard = async (req, res) => {
 
     // Count completed orders
     const completedCount = await Order.countDocuments({
-      rider_id: rider._id,
+      riderId: rider._id,
       status: "delivered"
     });
 
@@ -84,7 +88,7 @@ const getDashboard = async (req, res) => {
     tomorrow.setDate(today.getDate() + 1);
 
     const todaysOrderCount = await Order.countDocuments({
-      rider_id: rider._id,
+      riderId: rider._id,
       status: { $in: ["accepted", "out-for-delivery"] },
       deliveryDate: { $gte: today, $lt: tomorrow }
     });
@@ -200,14 +204,56 @@ const getPendingOrders = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const orders = await Order.find({
-      status: "confirmed",
-      deliveryDate: { $gte: today },
-      ignoredBy: { $ne: req.user._id }
-    })
-      .populate("user_id")
-      .populate("product_id")
-      .sort({ deliveryDate: 1 });
+    //Use aggregation pipeline instead of populate to avoid N+1 query problem
+    // This makes 1 query instead of 1 + n*2 (n = number of orders)
+    const orders = await Order.aggregate([
+      {
+        $match: {
+          status: "confirmed",
+          deliveryDate: { $gte: today },
+          ignoredBy: { $not: { $elemMatch: { riderId: req.user._id } } }
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "userDetails"
+        }
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "productId",
+          foreignField: "_id",
+          as: "productDetails"
+        }
+      },
+      {
+        $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: true }
+      },
+      {
+        $unwind: { path: "$productDetails", preserveNullAndEmptyArrays: true }
+      },
+      {
+        $sort: { deliveryDate: 1 }
+      },
+      {
+        $project: {
+          _id: 1,
+          deliveryDate: 1,
+          deliverySlot: 1,
+          address: 1,
+          userName: "$userDetails.name",
+          userLocation: "$location",
+          productName: "$productDetails.name",
+          status: 1,
+          phoneNumber: 1,
+          paid: 1
+        }
+      }
+    ]);
 
     const groupedOrders = {};
 
@@ -218,18 +264,7 @@ const getPendingOrders = async (req, res) => {
         groupedOrders[dateKey] = [];
       }
 
-      groupedOrders[dateKey].push({
-        _id: order._id,
-        deliveryDate: order.deliveryDate,
-        deliverySlot: order.deliverySlot,
-        address: order.user_id?.address,
-        userName: order.user_id?.name,
-        userLocation: order.user_id?.location,
-        productName: order.product_id?.name,
-        status: order.status,
-        ph_number: order.ph_number,
-        paid: order.paid
-      });
+      groupedOrders[dateKey].push(order);
     });
 
     // Sort slots inside each group by slot order
@@ -263,12 +298,11 @@ const getTodayOrders = async (req, res) => {
     // Fetch only accepted orders for the logged-in rider and today's delivery
     const orders = await Order.find({
       status: { $in: ["accepted", "out-for-delivery", "delivered"] },
-      rider_id: req.user._id,
+      riderId: req.user._id,
       deliveryDate: { $gte: today, $lt: tomorrow }
     })
-      .populate("user_id")
-      .populate("product_id")
-      .sort({ deliverySlot: 1 });
+      .populate("userId")
+      .populate("productId");
 
     // Group orders by time slot
     const groupedSlots = {};
@@ -280,19 +314,21 @@ const getTodayOrders = async (req, res) => {
         _id: order._id,
         deliveryDate: order.deliveryDate,
         deliverySlot: slot,
-        address: order.user_id?.address,
-        userName: order.user_id?.name,
-        userLocation: order.user_id?.location,
-        productName: order.product_id?.name,
+        address: order.address,
+        userName: order.userId?.name,
+        userLocation: order.location,
+        productName: order.productId?.name,
         status: order.status,
         payment: order.paid ? "prepaid" : "cod"
       });
     });
 
-    // Sort slots in desired order
+    // BUG #26 FIX: Sort slots in correct order using slotOrder mapping
     const sortedGroupedSlots = Object.keys(slotOrder)
       .filter(slot => groupedSlots[slot])
       .reduce((acc, slot) => {
+        // Within each slot, sort orders by userName for consistency
+        groupedSlots[slot].sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
         acc[slot] = groupedSlots[slot];
         return acc;
       }, {});
@@ -312,11 +348,10 @@ const getTodayOrders = async (req, res) => {
 const markOrderOutForDelivery = async (req, res) => {
   try {
     const { orderId } = req.body;
-    req.user.status = "out-for-delivery";
 
     await Order.findByIdAndUpdate(orderId, {
-      status: req.user.status,
-      rider_id: req.user._id
+      status: "out-for-delivery",
+      riderId: req.user._id
     });
 
     res.json({ success: true, message: "Order Out for Delivery" });
@@ -346,11 +381,11 @@ const getAcceptedOrders = async (req, res) => {
   try {
     const riderId = req.user._id;
     const activeOrders = await Order.find({
-      rider_id: riderId,
+      riderId: riderId,
       status: { $in: ["accepted", "out-for-delivery"] }
     })
-      .populate("user_id")
-      .populate("product_id")
+      .populate("userId")
+      .populate("productId")
       .sort({ deliveryDate: 1, deliverySlot: 1 });
 
     // Group orders by delivery date
@@ -361,15 +396,15 @@ const getAcceptedOrders = async (req, res) => {
 
       grouped[dateKey].push({
         _id: order._id,
-        productName: order.product_id?.name,
-        userName: order.user_id?.name,
-        ph_number: order.ph_number || order.user_id?.phone,
-        address: order.user_id?.address,
-        userLocation: order.user_id?.location,
+        productName: order.productId?.name,
+        userName: order.userId?.name,
+        phoneNumber: order.phoneNumber || order.userId?.phone,
+        address: order.address,
+        userLocation: order.location,
         deliverySlot: order.deliverySlot,
         status: order.status,
         payment: order.paid ? "Prepaid" : "COD",
-        amount: order.product_id?.price
+        amount: order.productId?.price
       });
     });
 
@@ -389,11 +424,11 @@ const getCompletedOrders = async (req, res) => {
   try {
     const riderId = req.user._id;
     const deliveredOrders = await Order.find({
-      rider_id: riderId,
+      riderId: riderId,
       status: "delivered"
     })
-      .populate("user_id")
-      .populate("product_id")
+      .populate("userId")
+      .populate("productId")
       .sort({ deliveryDate: -1, deliverySlot: 1 });
 
     // Group by delivery date
@@ -404,15 +439,15 @@ const getCompletedOrders = async (req, res) => {
 
       grouped[dateKey].push({
         _id: order._id,
-        productName: order.product_id?.name,
-        userName: order.user_id?.name,
-        ph_number: order.ph_number || order.user_id?.phone, // Phone fallback
-        address: order.user_id?.address,
-        userLocation: order.user_id?.location, // Map string or coords if available
+        productName: order.productId?.name,
+        userName: order.userId?.name,
+        phoneNumber: order.phoneNumber || order.userId?.phone, // Phone fallback
+        address: order.address,
+        userLocation: order.location, // Map string or coords if available
         deliverySlot: order.deliverySlot,
         status: order.status,
         payment: order.paid ? "Prepaid" : "COD",
-        amount: order.product_id?.price // Useful to show amount to collect
+        amount: order.productId?.price // Useful to show amount to collect
       });
     });
 
@@ -443,13 +478,16 @@ const getUnacceptedOrders = async (req, res) => {
       return now >= slotStart;
     });
 
-    res.render("user-unaccepted-orders", {
+    // BUG #28 FIX: Return JSON API response instead of HTML
+    res.json({
+      success: true,
       user: req.user,
-      unacceptedOrders
+      unacceptedOrders,
+      count: unacceptedOrders.length
     });
   } catch (err) {
     console.error("Error fetching unaccepted orders:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ success: false, error: "Server error" });
   }
 };
 
@@ -457,6 +495,18 @@ const getUnacceptedOrders = async (req, res) => {
 const updateOrderSlot = async (req, res) => {
   try {
     const { orderId, newDate, newSlot } = req.body;
+    
+    // BUG #27 FIX: Verify rider owns this order before updating
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    
+    // Only the assigned rider can update the delivery slot
+    if (order.riderId && order.riderId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: "Unauthorized: You can only modify your own orders" });
+    }
+    
     await Order.findByIdAndUpdate(orderId, {
       deliveryDate: new Date(newDate),
       deliverySlot: newSlot,
@@ -475,14 +525,14 @@ const getOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const order = await Order.findById(id)
-      .populate("user_id", "name email phone address location")
-      .populate("product_id", "name price image description duration category");
+      .populate("userId", "name email phone address location")
+      .populate("productId", "name price image description duration category");
 
     if (!order) {
       return res.status(404).json({ success: false, error: "Order not found" });
     }
 
-    if (order.status !== 'confirmed' && order.rider_id && order.rider_id.toString() !== req.user._id.toString()) {
+    if (order.status !== 'confirmed' && order.riderId && order.riderId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, error: "Unauthorized" });
     }
 
@@ -490,17 +540,17 @@ const getOrderDetails = async (req, res) => {
       success: true,
       order: {
         _id: order._id,
-        product: order.product_id,
-        user: order.user_id,
+        product: order.productId,
+        user: order.userId,
         deliverySlot: order.deliverySlot,
         status: order.status,
         paymentMode: order.paid ? "Prepaid" : "COD",
-        amount: order.product_id?.price,
+        amount: order.productId?.price,
         orderDate: order.orderDate,
-        ph_number: order.ph_number || order.user_id?.phone,
-        latitude: order.lat || order.user_id?.latitude,
-        longitude: order.lng || order.user_id?.longitude,
-        address: order.address || order.user_id?.address
+        phoneNumber: order.phoneNumber || order.userId?.phone,
+        latitude: order.lat || order.userId?.latitude,
+        longitude: order.lng || order.userId?.longitude,
+        address: order.address || order.userId?.address
       }
     });
 

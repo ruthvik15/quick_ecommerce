@@ -7,8 +7,8 @@ const getProductDetail = async (req, res) => {
     const product = await Product.findById(req.params.id).populate('seller');
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    const reviews = await Review.find({ product_id: product._id })
-      .populate('user_id')
+    const reviews = await Review.find({ productId: product._id })
+      .populate('userId')
       .sort({ createdAt: -1 });
 
     res.json({
@@ -30,14 +30,14 @@ const postReview = async (req, res) => {
 
   try {
     await Review.create({
-      product_id: productId,
-      user_id: req.user._id,
+      productId: productId,
+      userId: req.user._id,
       comment,
       rating
     });
 
 
-    const reviews = await Review.find({ product_id: productId });
+    const reviews = await Review.find({ productId: productId });
     const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
 
     await Product.findByIdAndUpdate(productId, { averageRating: avgRating });

@@ -1,22 +1,37 @@
 import { useState, useEffect, useContext } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import Navbar from "../components/Navbar";
 import endpoints from "../api/endpoints";
 import { AuthContext } from "../context/AuthContext";
+import { LocationContext } from "../context/LocationContext";
 
 const Home = () => {
     const { user } = useContext(AuthContext);
+    const { selectedLocation } = useContext(LocationContext);
+    const navigate = useNavigate();
     const [products, setProducts] = useState([]);
-    const [cartItems, setCartItems] = useState({}); // Map of productId -> quantity
+    const [cartItems, setCartItems] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+
     const location = useLocation();
 
-    // Fetch Cart to sync quantities
+    // Redirect riders and sellers to their dashboards
+    useEffect(() => {
+        if (user) {
+            if (user.role === 'rider') {
+                navigate('/rider/dashboard');
+            } else if (user.role === 'seller') {
+                navigate('/seller/dashboard');
+            }
+        }
+    }, [user, navigate]);
+
+    // Fetch cart to sync quantities
     const fetchCart = async () => {
         if (!user) return;
         try {
@@ -39,6 +54,9 @@ const Home = () => {
     }, [user]);
 
     const fetchProducts = async (pageNum = 1, append = false) => {
+        // Only proceed if location is selected
+        if (!selectedLocation) return;
+
         if (append) {
             setLoadingMore(true);
         } else {
@@ -48,6 +66,7 @@ const Home = () => {
         try {
             const searchParams = new URLSearchParams(location.search);
             searchParams.set('page', pageNum);
+            searchParams.set('location', selectedLocation); // FIXED: Add location to query
 
             const res = await fetch(`${endpoints.products.base}/?${searchParams.toString()}`, {
                 credentials: 'include'
@@ -73,10 +92,13 @@ const Home = () => {
         }
     };
 
+    // FIXED: Re-fetch when location changes
     useEffect(() => {
-        setPage(1);
-        fetchProducts(1, false);
-    }, [location.search]);
+        if (selectedLocation) {
+            setPage(1);
+            fetchProducts(1, false);
+        }
+    }, [selectedLocation, location.search]);
 
     const handleLoadMore = () => {
         const nextPage = page + 1;

@@ -55,8 +55,6 @@ const Signup = () => {
                 <h2>Create Account</h2>
                 <p className="subtitle">Join us today!</p>
 
-                {error && <div className="error-message">{error}</div>}
-
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label>Name</label>
@@ -137,7 +135,9 @@ const Signup = () => {
                         </div>
                     )}
 
-                    <button type="submit" className="btn-primary">Sign Up</button>
+                    {error && <div className="error-message">{error}</div>}
+
+                    <button type="submit" className="btn-primary btn-block">Sign Up</button>
                 </form>
                 
                 <p className="footer-text">

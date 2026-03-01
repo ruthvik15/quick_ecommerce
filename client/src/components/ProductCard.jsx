@@ -6,7 +6,7 @@ import endpoints from "../api/endpoints";
 
 const ProductCard = ({ product, initialQuantity = 0, onUpdateCart }) => {
     const { user } = useContext(AuthContext);
-    const { cartItems, updateItemQuantity } = useContext(CartContext);
+    const { cartItems, fetchCart } = useContext(CartContext);
     const navigate = useNavigate();
 
     // Prefer global context quantity if available, fallback to props/0
@@ -27,7 +27,7 @@ const ProductCard = ({ product, initialQuantity = 0, onUpdateCart }) => {
             });
             const data = await res.json();
             if (data.success) {
-                updateItemQuantity(product._id, 1);
+                fetchCart();
                 if (onUpdateCart) onUpdateCart(product._id, 1);
             }
         } catch (err) {
@@ -50,9 +50,8 @@ const ProductCard = ({ product, initialQuantity = 0, onUpdateCart }) => {
             });
             const data = await res.json();
             if (data.success) {
-                const newQty = quantity + 1;
-                updateItemQuantity(product._id, newQty);
-                if (onUpdateCart) onUpdateCart(product._id, newQty);
+                fetchCart();
+                if (onUpdateCart) onUpdateCart(product._id, quantity + 1);
             }
         } catch (err) {
             console.error(err);
@@ -77,9 +76,8 @@ const ProductCard = ({ product, initialQuantity = 0, onUpdateCart }) => {
             });
             const data = await res.json();
             if (data.success) {
-                const newQty = quantity - 1;
-                updateItemQuantity(product._id, newQty);
-                if (onUpdateCart) onUpdateCart(product._id, newQty);
+                fetchCart();
+                if (onUpdateCart) onUpdateCart(product._id, quantity - 1);
             }
         } catch (err) {
             console.error(err);

@@ -1,17 +1,17 @@
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const endpoints = {
     auth: {
         login: `${API_BASE_URL}/login`,
         signup: `${API_BASE_URL}/signup`,
         logout: `${API_BASE_URL}/logout`,
-        profile: `${API_BASE_URL}/profile`,
+        me: `${API_BASE_URL}/me`,
     },
     products: {
         getAll: `${API_BASE_URL}/product/all`,
-        detail: `${API_BASE_URL}/product`, // UI adds /id
-        search: `${API_BASE_URL}/search`,  // UI adds ?searchQuery=...
-        searchSuggestions: `${API_BASE_URL}/search-suggestions`, // UI adds ?q=...
+        detail: (id) => `${API_BASE_URL}/product/${id}`,
+        search: `${API_BASE_URL}/search`,
+        searchSuggestions: `${API_BASE_URL}/search-suggestions`,
         addReview: `${API_BASE_URL}/product/review`,
         base: API_BASE_URL,
     },
@@ -30,16 +30,19 @@ const endpoints = {
     },
     orders: {
         trackOrders: `${API_BASE_URL}/trackorders`,
-        trackOrderDetail: `${API_BASE_URL}/order`, // UI adds /id
+        trackOrderDetail: (id) => `${API_BASE_URL}/trackorders/${id}`,
         cancelOrder: `${API_BASE_URL}/cancel-order`,
+        riderLocation: (id) => `${API_BASE_URL}/orders/${id}/rider-location`,
     },
     seller: {
         sellerDashboard: `${API_BASE_URL}/seller/dashboard`,
         addProduct: `${API_BASE_URL}/seller/product/add`,
-        stopProduct: `${API_BASE_URL}/seller/product/stop`, // UI adds /id
-        updatePrice: `${API_BASE_URL}/seller/product/update-price`, // UI adds /id
-        updateQuantity: `${API_BASE_URL}/seller/product/update-quantity`, // UI adds /id
-        heatmap: `${API_BASE_URL}/seller`, // Complex path
+        stopProduct: (id) => `${API_BASE_URL}/seller/product/stop/${id}`,
+        resumeProduct: (id) => `${API_BASE_URL}/seller/product/resume/${id}`,
+        updatePrice: (id) => `${API_BASE_URL}/seller/product/update-price/${id}`,
+        updateQuantity: (id) => `${API_BASE_URL}/seller/product/update-quantity/${id}`,
+        deleteProduct: (id) => `${API_BASE_URL}/seller/product/delete/${id}`,
+        heatmap: (sellerId, productId) => `${API_BASE_URL}/seller/${sellerId}/product/${productId}/heatmap`,
         dashboardTrackSection: `${API_BASE_URL}/seller/dashboard-track-section`,
     },
     rider: {
@@ -52,8 +55,9 @@ const endpoints = {
         rejectOrder: `${API_BASE_URL}/rider/orders/reject`,
         outForDelivery: `${API_BASE_URL}/rider/orders/out-for-delivery`,
         completeOrder: `${API_BASE_URL}/rider/orders/complete`,
-        updateStatus: `${API_BASE_URL}/rider/orders`, // UI adds /id/status
-        orderDetail: `${API_BASE_URL}/rider/orders/details`, // UI adds /id
+        updateStatus: (id) => `${API_BASE_URL}/rider/orders/${id}/status`,
+        orderDetail: (id) => `${API_BASE_URL}/rider/orders/details/${id}`,
+        updateLocation: `${API_BASE_URL}/rider/update-location`,
     }
 };
 

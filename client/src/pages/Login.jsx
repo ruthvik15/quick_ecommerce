@@ -47,8 +47,6 @@ const Login = () => {
                 <h2>Welcome Back</h2>
                 <p className="subtitle">Login to your account</p>
 
-                {error && <div className="error-message">{error}</div>}
-
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label>Role</label>
@@ -79,7 +77,9 @@ const Login = () => {
                         />
                     </div>
 
-                    <button type="submit" className="btn-primary">Login</button>
+                    {error && <div className="error-message">{error}</div>}
+
+                    <button type="submit" className="btn-primary btn-block">Login</button>
                 </form>
                 <p className="footer-text">
                     Don't have an account? <Link to="/signup">Sign up</Link>

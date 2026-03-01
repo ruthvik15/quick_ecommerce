@@ -21,7 +21,13 @@ const cartSchema = new Schema({
         min: 1
       }
     }
-  ]
+  ],
+  // BUG #12 FIX: Track cart location to ensure all items are from same city
+  location: {
+    type: String,
+    enum: ["hyderabad", "bengaluru", "mumbai", "delhi"],
+    default: null
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Cart", cartSchema);

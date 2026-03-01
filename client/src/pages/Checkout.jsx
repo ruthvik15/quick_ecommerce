@@ -2,6 +2,7 @@ import { useState, useEffect, useContext, useRef, useMemo } from "react";
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import Toast from "../components/Toast";
 import { AuthContext } from "../context/AuthContext";
 import endpoints from "../api/endpoints";
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
@@ -32,18 +33,28 @@ const LocationMarker = ({ position, setPosition }) => {
     );
 };
 
+// Helper function to get local date in YYYY-MM-DD format
+const getTodayLocal = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const Checkout = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading: authLoading } = useContext(AuthContext);
     const [cart, setCart] = useState(null);
     const [razorpayKeyId, setRazorpayKeyId] = useState("");
     const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState(null);
     const [formData, setFormData] = useState({
         address: "",
         phone: "",
         paymentMethod: "online",
         latitude: 17.3850,
         longitude: 78.4867,
-        deliveryDate: new Date().toISOString().split('T')[0],
+        deliveryDate: getTodayLocal(),
         deliverySlot: "10-12"
     });
     const [markerPosition, setMarkerPosition] = useState({ lat: 17.3850, lng: 78.4867 });
@@ -54,6 +65,21 @@ const Checkout = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
+        // Check auth and role
+        if (authLoading) return;
+        if (!user) {
+            navigate("/login");
+            return;
+        }
+        if (user.role === 'rider') {
+            navigate('/rider/dashboard');
+            return;
+        }
+        if (user.role === 'seller') {
+            navigate('/seller/dashboard');
+            return;
+        }
+
         // Load Razorpay Script
         const script = document.createElement("script");
         script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -63,6 +89,12 @@ const Checkout = () => {
         const fetchCheckoutData = async () => {
             try {
                 const res = await fetch(endpoints.checkout.getCheckoutData, { credentials: "include" });
+                
+                if (res.status === 401) {
+                    navigate("/login");
+                    return;
+                }
+                
                 const data = await res.json();
 
                 if (data.success) {
@@ -90,9 +122,9 @@ const Checkout = () => {
                         }));
                     }
                 } else {
-                    alert(data.error);
+                    setToast({ message: data.error, type: "error" });
                     if (data.code === "LOCATION_MISMATCH") {
-                        navigate("/cart");
+                        setTimeout(() => navigate("/cart"), 2000);
                     } else if (data.error === "Unauthorized") {
                         navigate("/login");
                     }
@@ -111,7 +143,7 @@ const Checkout = () => {
                 document.body.removeChild(script);
             }
         }
-    }, [navigate]);
+    }, [navigate, user, authLoading]);
 
     // Update formData when marker changes
     useEffect(() => {
@@ -192,9 +224,9 @@ const Checkout = () => {
 
             if (formData.paymentMethod === "cod") {
                 if (data.success) {
-                    navigate("/order-success");
+                    navigate("/order-success", { state: { fromCheckout: true } });
                 } else {
-                    alert(data.error || "Order failed");
+                    setToast({ message: data.error || "Order failed", type: "error" });
                 }
                 return;
             }
@@ -219,9 +251,9 @@ const Checkout = () => {
                         });
                         const verifyData = await verifyRes.json();
                         if (verifyData.success) {
-                            navigate("/order-success");
+                            navigate("/order-success", { state: { fromCheckout: true } });
                         } else {
-                            alert("Payment Verification Failed");
+                            setToast({ message: "Payment verification failed", type: "error" });
                         }
                     },
                     prefill: {
@@ -238,12 +270,12 @@ const Checkout = () => {
                 rzp1.open();
             } else {
                 // Handle errors from backend (e.g., failed to create order)
-                alert(data.error || "Failed to initiate online payment.");
+                setToast({ message: data.error || "Failed to initiate online payment", type: "error" });
             }
 
         } catch (err) {
             console.error("Checkout failed", err);
-            alert("Checkout failed. Please try again.");
+            setToast({ message: "Checkout failed. Please try again.", type: "error" });
         }
     };
 
@@ -252,6 +284,13 @@ const Checkout = () => {
     return (
         <>
             <Navbar />
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
             <div className="container checkout-page">
                 <h1>Checkout</h1>
                 <div className="checkout-grid">
@@ -298,7 +337,7 @@ const Checkout = () => {
                             </div>
                             <div className="form-group">
                                 <label>Delivery Date</label>
-                                <input type="date" name="deliveryDate" min={new Date().toISOString().split('T')[0]} value={formData.deliveryDate} onChange={handleChange} required />
+                                <input type="date" name="deliveryDate" min={getTodayLocal()} value={formData.deliveryDate} onChange={handleChange} required />
                             </div>
                             <div className="form-group">
                                 <label>Time Slot</label>

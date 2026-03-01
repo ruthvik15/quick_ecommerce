@@ -3,12 +3,12 @@ const Schema = mongoose.Schema;
 
 const reviewSchema = new Schema(
   {
-    product_id: {
+    productId: {
       type: Schema.Types.ObjectId,
       ref: "Product",
       required: true
     },
-    user_id: {
+    userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true
@@ -26,6 +26,9 @@ const reviewSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Prevent duplicate reviews from same user for same product
+reviewSchema.index({ productId: 1, userId: 1 }, { unique: true });
 
 const Review = mongoose.model("Review", reviewSchema);
 module.exports = Review;

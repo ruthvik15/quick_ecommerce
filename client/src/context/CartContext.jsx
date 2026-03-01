@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from "react";
+import { createContext, useState, useContext, useEffect, useCallback } from "react";
 import endpoints from "../api/endpoints";
 import { AuthContext } from "./AuthContext";
 
@@ -9,8 +9,18 @@ export const CartProvider = ({ children }) => {
     const [cartCount, setCartCount] = useState(0);
     const [cartItems, setCartItems] = useState({});
 
-    const fetchCart = async () => {
-        if (!user || user.role !== 'user') {
+    // FIXED: Use useCallback to prevent unnecessary re-renders and dependency issues
+    const fetchCart = useCallback(async () => {
+        // FIXED: Better role check - only regular users should have carts
+        // Allow any user role except if explicitly checking that role is 'user'
+        if (!user) {
+            setCartCount(0);
+            setCartItems({});
+            return;
+        }
+
+        // Only non-seller, non-rider users should have carts
+        if (user.role !== 'user') {
             setCartCount(0);
             setCartItems({});
             return;
@@ -20,6 +30,7 @@ export const CartProvider = ({ children }) => {
             const res = await fetch(endpoints.cart.getCart, { credentials: "include" });
             const data = await res.json();
             if (data.success && data.cart) {
+                // Count number of distinct products
                 setCartCount(data.cart.items.length);
 
                 const itemsMap = {};
@@ -34,16 +45,14 @@ export const CartProvider = ({ children }) => {
         } catch (err) {
             console.error("Error fetching cart:", err);
         }
-    };
-
-    useEffect(() => {
-        fetchCart();
     }, [user]);
 
+    // FIXED: useEffect dependency now includes fetchCart from useCallback
     useEffect(() => {
-        setCartCount(Object.keys(cartItems).length);
-    }, [cartItems]);
-    const updateItemQuantity = (productId, newQty) => {
+        fetchCart();
+    }, [fetchCart]);
+    
+    const updateItemQuantity = useCallback((productId, newQty) => {
         setCartItems(prev => {
             const updated = { ...prev };
             if (newQty <= 0) {
@@ -53,7 +62,7 @@ export const CartProvider = ({ children }) => {
             }
             return updated;
         });
-    };
+    }, []);
 
     return (
         <CartContext.Provider value={{ cartCount, cartItems, fetchCart, updateItemQuantity }}>

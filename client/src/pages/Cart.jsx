@@ -36,6 +36,14 @@ const Cart = () => {
             navigate("/login");
             return;
         }
+        if (user.role === 'rider') {
+            navigate('/rider/dashboard');
+            return;
+        }
+        if (user.role === 'seller') {
+            navigate('/seller/dashboard');
+            return;
+        }
         fetchCart();
     }, [user, authLoading, navigate]);
 
@@ -118,7 +126,7 @@ const Cart = () => {
                                 <span>Total Amount:</span>
                                 <span>₹{cart.items.reduce((acc, item) => acc + (item.product.price * item.quantity), 0)}</span>
                             </div>
-                            <Link to="/checkout" className="btn-primary btn-checkout">Proceed to Checkout</Link>
+                            <Link to="/checkout" className="btn-checkout">Proceed to Checkout</Link>
                         </div>
                     </div>
                 )}

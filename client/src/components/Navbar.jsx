@@ -1,15 +1,18 @@
 import { useState, useEffect, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
+import { LocationContext } from "../context/LocationContext";
 import { CartContext } from "../context/CartContext";
 import endpoints from "../api/endpoints";
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
     const { cartCount } = useContext(CartContext);
+    const { selectedLocation, setSelectedLocation, cities } = useContext(LocationContext);
     const [searchQuery, setSearchQuery] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [showLocationDropdown, setShowLocationDropdown] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -56,6 +59,7 @@ const Navbar = () => {
                     Quick Kart
                 </Link>
 
+                {(!user || user.role === 'user') && (
                 <form onSubmit={handleSearch} className="search-bar">
                     <input
                         type="text"
@@ -82,9 +86,40 @@ const Navbar = () => {
                         </div>
                     )}
                 </form>
+                )}
+
+                {/* FIXED: Location Selector in Navbar */}
+                {(!user || user.role === 'user') && selectedLocation && (
+                    <div className="location-selector">
+                        <button
+                            className="location-btn"
+                            onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                        >
+                            📍 {selectedLocation.charAt(0).toUpperCase() + selectedLocation.slice(1)}
+                        </button>
+                        {showLocationDropdown && (
+                            <div className="location-dropdown">
+                                {cities.map((city) => (
+                                    <button
+                                        key={city}
+                                        className={`dropdown-item ${selectedLocation === city ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setSelectedLocation(city);
+                                            setShowLocationDropdown(false);
+                                        }}
+                                    >
+                                        {city.charAt(0).toUpperCase() + city.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className="nav-links">
-                    <Link to="/" className="nav-item">Home</Link>
+                    {(!user || user.role === 'user') && (
+                        <Link to="/" className="nav-item">Home</Link>
+                    )}
 
                     {user ? (
                         <>

@@ -1,7 +1,49 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useContext, useEffect } from "react";
 import Navbar from "../components/Navbar";
+import { CartContext } from "../context/CartContext";
+import { AuthContext } from "../context/AuthContext";
 
 const OrderSuccess = () => {
+    const { fetchCart } = useContext(CartContext);
+    const { user, loading } = useContext(AuthContext);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Protect route - only accessible after successful checkout or if logged in
+    useEffect(() => {
+        if (loading) return;
+        
+        // If not logged in, redirect to login
+        if (!user) {
+            navigate("/login");
+            return;
+        }
+        
+        // Restrict riders and sellers
+        if (user.role === 'rider') {
+            navigate('/rider/dashboard');
+            return;
+        }
+        if (user.role === 'seller') {
+            navigate('/seller/dashboard');
+            return;
+        }
+        
+        // If accessed directly (not from checkout), redirect to home
+        if (!location.state?.fromCheckout) {
+            navigate("/");
+            return;
+        }
+    }, [user, loading, location, navigate]);
+
+    // Refresh cart after successful order (backend clears cart)
+    useEffect(() => {
+        if (user) {
+            fetchCart();
+        }
+    }, [fetchCart, user]);
+
     return (
         <>
             <Navbar />

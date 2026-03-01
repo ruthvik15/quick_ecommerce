@@ -34,13 +34,12 @@ const productSchema = new Schema(
     },
     seller: {
       type: Schema.Types.ObjectId,
-      ref: "User"
+      ref: "Seller"
     },
     status:{
       type:String,
-      enum: ["live", "stopped"],
+      enum: ["live", "stopped", "sold"],
       default:"live"
-
     },
     soldCount: {
       type: Number,
@@ -59,6 +58,12 @@ const productSchema = new Schema(
 productSchema.index({ name: 1 });
 productSchema.index({ location: 1, category: 1 });
 productSchema.index({ price: 1 });
+// Add status index for product filtering (live/stopped/sold)
+productSchema.index({ status: 1 });
+// Seller dashboard queries products by seller
+productSchema.index({ seller: 1, status: 1 });
+// Search with location and name
+productSchema.index({ location: 1, name: 1, status: 1 });
 
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;
