@@ -53,6 +53,10 @@ const ProductHeatmap = () => {
     const fetchHeatmapData = async (productId) => {
         try {
             const res = await fetch(endpoints.seller.heatmap(user._id, productId), { credentials: "include" });
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
             const data = await res.json();
             if (data.success) {
                 setHeatmapData(data.blocks);

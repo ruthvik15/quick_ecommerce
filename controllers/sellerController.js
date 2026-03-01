@@ -54,8 +54,16 @@ async function getDashboard(req, res) {
   try {
     const products = await Product.find({ seller: req.user._id });
 
+    // BUG #37 FIX: Only aggregate orders for THIS seller's products, not all orders
+    const sellerProductIds = products.map(p => p._id);
+    
     const soldCounts = await Order.aggregate([
-      { $match: { status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] } } },
+      { 
+        $match: { 
+          productId: { $in: sellerProductIds },
+          status: { $in: ['confirmed', 'accepted', 'out-for-delivery', 'delivered'] } 
+        } 
+      },
       { $group: { _id: '$productId', totalSold: { $sum: '$quantity' } } }
     ]);
 
@@ -161,6 +169,11 @@ function renderAddPage(req, res) {
 
 async function uploadProduct(req, res) {
   try {
+    // BUG #36 FIX: Verify user is a seller before allowing product upload
+    if (!req.user || req.user.role !== 'seller') {
+      return res.status(403).json({ error: "Unauthorized: Only sellers can upload products" });
+    }
+    
     const { name, price, location, category, description, quantity } = req.body;
     if (!req.file || !name || !price || !location || !category || !description || !quantity) {
       return res.status(400).json({ error: "All fields including image are required" });
@@ -193,9 +206,26 @@ async function getDashboardTrackSection(req,res){
   try {
     const sellerId = req.user._id; // Get from authenticated user instead of params
     
-    // Get seller's products first
+    // BUG #32 FIX: Get seller's products first, then find orders for those products
+    // (Order model doesn't have seller field, so we use productId lookup)
     const sellerProducts = await Product.find({ seller: sellerId }).select('_id');
     const productIds = sellerProducts.map(p => p._id);
+    
+    if (productIds.length === 0) {
+      // Seller has no products, return empty dashboard
+      return res.json({
+        success: true,
+        trackSection: {
+          orders: [],
+          totalRevenue: 0,
+          totalOrders: 0,
+          totalProductsLive: 0,
+          totalProducts: 0,
+          totalProductsSold: 0,
+          activeProducts: 0
+        }
+      });
+    }
     
     // Find orders for those products
     const orders = await Order.find({ 
@@ -210,8 +240,9 @@ async function getDashboardTrackSection(req,res){
     const totalProductsStopped = await Product.countDocuments({seller:sellerId, status:'stopped'});
     const totalProducts = totalProductsLive + totalProductsStopped;
     
-    // Count delivered orders as sold products
-    const totalProductsSold = orders.filter(o => o.status === 'delivered').length;
+    // Count total quantity of items sold across all successful order statuses
+    const totalProductsSold = orders
+      .reduce((total, order) => total + order.quantity, 0);
     const activeProducts = totalProductsLive;
     
     res.json({

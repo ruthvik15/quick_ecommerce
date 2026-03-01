@@ -37,15 +37,34 @@ async function addToCart(req, res) {
     }
 
     let cart = await Cart.findOne({ user: userId });
+    const productLocation = product.location.toLowerCase();
 
     if (!cart) {
+      // BUG #12 FIX: Create cart with location tracking
       cart = await Cart.create({
         user: userId,
-        items: [{ product: productId, quantity: 1 }]
+        items: [{ product: productId, quantity: 1 }],
+        location: productLocation
       });
       // Populate for the return value
       await cart.populate("items.product");
     } else {
+      // BUG #12 FIX: Check if product location matches cart location
+      if (cart.location && cart.location !== productLocation) {
+        // Location mismatch - clear the cart and add new product
+        await Cart.findByIdAndUpdate(cart._id, {
+          items: [{ product: productId, quantity: 1 }],
+          location: productLocation
+        });
+        cart = await Cart.findById(cart._id).populate("items.product");
+        return res.json({ 
+          success: true, 
+          message: "Cart cleared - products must be from same city. Added item from new location.", 
+          cart 
+        });
+      }
+
+      // Same location - proceed normally
       const index = cart.items.findIndex(item => item.product.toString() === productId);
       if (index >= 0) {
         // Check stock before increasing quantity

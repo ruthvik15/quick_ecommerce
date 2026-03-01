@@ -25,7 +25,7 @@ const renderHome = async (req, res) => {
   const { category, sort, page = 1, limit = 20 } = req.query; // Changed default limit to 20
 
 
-  // Check if user has cart items from different location and remove them
+  // BUG #12 FIX: Check if user has cart items from different location and remove them
   let cartLocationMismatch = false;
   if (req.user) {
     const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
@@ -33,7 +33,7 @@ const renderHome = async (req, res) => {
       // Filter out items from different locations
       const originalLength = cart.items.length;
       cart.items = cart.items.filter(item => {
-        if (item.product && item.product.location !== selectedLocation) {
+        if (item.product && item.product.location.toLowerCase() !== selectedLocation.toLowerCase()) {
           return false; // Remove item from different location
         }
         return true;
@@ -41,8 +41,19 @@ const renderHome = async (req, res) => {
       
       // If items were removed, save cart and notify user
       if (cart.items.length < originalLength) {
+        // Update cart location to current selected location if cart still has items
+        if (cart.items.length > 0) {
+          cart.location = selectedLocation.toLowerCase();
+        } else {
+          // Cart is now empty, clear location
+          cart.location = null;
+        }
         await cart.save();
         cartLocationMismatch = true;
+      } else if (!cart.location) {
+        // Cart hasn't been updated with location yet, set it now
+        cart.location = selectedLocation.toLowerCase();
+        await cart.save();
       }
     }
   }

@@ -302,8 +302,7 @@ const getTodayOrders = async (req, res) => {
       deliveryDate: { $gte: today, $lt: tomorrow }
     })
       .populate("userId")
-      .populate("productId")
-      .sort({ deliverySlot: 1 });
+      .populate("productId");
 
     // Group orders by time slot
     const groupedSlots = {};
@@ -324,10 +323,12 @@ const getTodayOrders = async (req, res) => {
       });
     });
 
-    // Sort slots in desired order
+    // BUG #26 FIX: Sort slots in correct order using slotOrder mapping
     const sortedGroupedSlots = Object.keys(slotOrder)
       .filter(slot => groupedSlots[slot])
       .reduce((acc, slot) => {
+        // Within each slot, sort orders by userName for consistency
+        groupedSlots[slot].sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
         acc[slot] = groupedSlots[slot];
         return acc;
       }, {});
@@ -477,13 +478,16 @@ const getUnacceptedOrders = async (req, res) => {
       return now >= slotStart;
     });
 
-    res.render("user-unaccepted-orders", {
+    // BUG #28 FIX: Return JSON API response instead of HTML
+    res.json({
+      success: true,
       user: req.user,
-      unacceptedOrders
+      unacceptedOrders,
+      count: unacceptedOrders.length
     });
   } catch (err) {
     console.error("Error fetching unaccepted orders:", err);
-    res.status(500).send("Server error");
+    res.status(500).json({ success: false, error: "Server error" });
   }
 };
 
@@ -491,6 +495,18 @@ const getUnacceptedOrders = async (req, res) => {
 const updateOrderSlot = async (req, res) => {
   try {
     const { orderId, newDate, newSlot } = req.body;
+    
+    // BUG #27 FIX: Verify rider owns this order before updating
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    
+    // Only the assigned rider can update the delivery slot
+    if (order.riderId && order.riderId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: "Unauthorized: You can only modify your own orders" });
+    }
+    
     await Order.findByIdAndUpdate(orderId, {
       deliveryDate: new Date(newDate),
       deliverySlot: newSlot,
