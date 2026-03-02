@@ -15,7 +15,7 @@ import RiderDashboard from "./pages/RiderDashboard";
 import RiderOrderDetails from "./pages/RiderOrderDetails";
 import MyOrders from "./pages/MyOrders";
 import TrackOrder from "./pages/TrackOrder";
-import SearchPage from "./pages/searchPage";
+import SearchPage from "./pages/SearchPage";
 
 function App() {
   return (
