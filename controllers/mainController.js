@@ -16,7 +16,11 @@ const setLocation = (req, res) => {
   const loc = req.query.loc?.toLowerCase();
   const validLocations = ["hyderabad", "bengaluru", "mumbai", "delhi"];
   if (!validLocations.includes(loc)) return res.redirect("/");
-  res.cookie("selectedLocation", loc, { maxAge: 30 * 24 * 60 * 60 * 1000 });
+  res.cookie("selectedLocation", loc, {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    secure: true,
+    sameSite: 'none'
+  });
   res.redirect("/");
 };
 
@@ -184,15 +188,17 @@ const login = async (req, res) => {
     const existingLocation = req.cookies.selectedLocation;
     if (!existingLocation && user.location) {
       res.cookie("selectedLocation", user.location, {
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        httpOnly: false // Accessible to JavaScript for frontend
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        httpOnly: false,
+        secure: true,
+        sameSite: 'none'
       });
     }
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000
     });
     
@@ -236,15 +242,17 @@ const signup = async (req, res) => {
     const existingLocation = req.cookies.selectedLocation;
     if (!existingLocation && location) {
       res.cookie("selectedLocation", location, {
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        httpOnly: false // Accessible to JavaScript for frontend
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        httpOnly: false,
+        secure: true,
+        sameSite: 'none'
       });
     }
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
     // Not sending full user object - only essential fields
