@@ -149,7 +149,12 @@ const signupRider = async (req, res) => {
     const token = await Rider.matchPassword(email, password);
 
     // Set token in cookie
-    res.cookie("token", token, { httpOnly: true });
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     res.json({ success: true, token, role: "rider", user: newRider, redirectUrl: "/rider/dashboard" });
   } catch (err) {
     console.error("Rider signup failed:", err);
