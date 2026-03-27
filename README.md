@@ -43,6 +43,7 @@
 - Intelligent slot-based order organization with correct chronological sorting
 - Live customer tracking with automatic city selection
 - Order acceptance workflow with stock validation
+- **📱 NEW: Native Android App** - Production-ready Android application with background location tracking, offline support, and native mobile features (See [android/README.md](android/README.md))
 
 ### 🔐 **Security & Data Integrity**
 - **MongoDB transactions** for atomic multi-item checkout operations
@@ -72,6 +73,7 @@
 | **Backend Framework** | Express.js |
 | **Frontend Framework** | React 18 + Vite |
 | **Frontend Routing** | React Router v7 |
+| **Mobile App** | Android (Kotlin, MVVM, Hilt) |
 | **Database** | MongoDB Atlas (with transactions) |
 | **Caching Layer** | Redis |
 | **Payment Gateway** | Razorpay |
@@ -94,7 +96,12 @@
 │   │   ├── pages/         # Page components
 │   │   ├── context/       # React context (Auth, Cart)
 │   │   └── api/           # API endpoints
-│   └── vite.config.js
+│   android/               # 📱 Native Android app for riders
+│   ├── app/
+│   │   ├── src/main/java/com/ecommerce/rider/
+│   │   └── build.gradle.kts
+│   └── README.md          # Android setup guide
+├── └── vite.config.js
 ├── controllers/           # Route handlers
 ├── models/                # MongoDB schemas
 ├── routes/                # API routes
