@@ -1,5 +1,4 @@
-// These represent actual warehouse/supply locations instead of just city centers
-// This allows more accurate distance calculations for deliverability
+//As of now i fixed the warehouse coordinates to be more accurate and skip dynamic distance calculation
 module.exports = {
   hyderabad: { 
     lat: 17.360389, 

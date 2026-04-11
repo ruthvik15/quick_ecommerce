@@ -1,62 +1,39 @@
-// controllers/riderController.js
-const path = require("path");
-const multer = require("multer");
-const User = require("../models/user");
-const Product = require("../models/product");
-const Cart = require("../models/cart");
-const Order = require("../models/order");
-const Rider = require("../models/rider");
-const redis = require("../utils/redisClient");
-const { getCache, setCache } = require("../utils/cache");
+const riderRepository = require("../repositories/riderRepository");
+const { setCache, getCache } = require("../utils/cache");
 
-// Slot order mapping
-const slotOrder = {
-  "10-12": 1,
-  "12-2": 2,
-  "2-4": 3,
-  "4-6": 4
-};
+// Slot display order (used for sorting)
+const slotOrder = { "10-12": 1, "12-2": 2, "2-4": 3, "4-6": 4 };
 
-// Accept an order
 const acceptOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
-    const order = await Order.findById(orderId);
 
-    if (!order || order.status !== "confirmed") {
+    const updatedOrder = await riderRepository.acceptOrderDb(req.user.id, orderId);
+
+    if (!updatedOrder) {
       return res.status(400).json({ error: "Order not available" });
     }
 
-    order.riderId = req.user._id;
-    order.status = "accepted";
-    await order.save();
-
-    res.json({ success: true, message: "Order accepted", order });
+    res.json({ success: true, message: "Order accepted", order: updatedOrder });
   } catch (err) {
     console.error("Error accepting order:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// Reject an order
 const rejectOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
-    const order = await Order.findById(orderId);
 
-    if (!order || order.status !== "confirmed") {
+    // Verify order exists and is still in confirmed state
+    const orderData = await riderRepository.getOrderStatus(orderId);
+
+    if (!orderData || orderData.status !== "confirmed") {
       return res.status(400).json({ error: "Order not found or already processed." });
     }
 
-    // Prevent duplicate ignores - check if rider already rejected this order
-    const alreadyRejected = order.ignoredBy.some(rejection => 
-      rejection.riderId.toString() === req.user._id.toString()
-    );
-    
-    if (!alreadyRejected) {
-      order.ignoredBy.push({ riderId: req.user._id, rejectedAt: new Date() });
-      await order.save();
-    }
+    // Prevent duplicate rejections — INSERT IGNORE pattern
+    await riderRepository.insertOrderRejection(orderId, req.user.id);
 
     res.json({ success: true, message: "Order rejected" });
   } catch (err) {
@@ -65,46 +42,27 @@ const rejectOrder = async (req, res) => {
   }
 };
 
-// Get rider dashboard
 const getDashboard = async (req, res) => {
   try {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-    const rider = await Rider.findById(req.user._id);
+    const riderId = req.user.id;
 
-    // Count completed orders
-    const completedCount = await Order.countDocuments({
-      riderId: rider._id,
-      status: "delivered"
-    });
+    // Compute completed order count as a live derived value.
+    const completedCount = await riderRepository.countDeliveredOrders(riderId);
+    const rider = await riderRepository.getRiderById(riderId);
 
-    rider.no_of_orders = completedCount;
-    await rider.save();
+    const todayStr = new Date().toISOString().split("T")[0];
 
-    // Count today's accepted or out-for-delivery orders
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    const todaysOrderCount = await Order.countDocuments({
-      riderId: rider._id,
-      status: { $in: ["accepted", "out-for-delivery"] },
-      deliveryDate: { $gte: today, $lt: tomorrow }
-    });
-
-    // Count order requests (unassigned pending orders)
-    const orderRequestCount = await Order.countDocuments({
-      status: "confirmed",
-      deliveryDate: { $gte: today }
-    });
+    const todaysOrderCount = await riderRepository.countTodaysOrders(riderId, todayStr);
+    const orderRequestCount = await riderRepository.countOrderRequests(riderId, req.user.location);
 
     res.json({
       success: true,
-      rider,
+      rider: { ...rider, no_of_orders: completedCount },
       todaysOrderCount,
       orderRequestCount,
-      user: req.user
+      user: req.user,
     });
   } catch (err) {
     console.error("Error fetching dashboard:", err);
@@ -112,57 +70,14 @@ const getDashboard = async (req, res) => {
   }
 };
 
-// Rider signup
+// ── signupRider — delegated to services (kept for backward compat) ─────────────
+
 const signupRider = async (req, res) => {
-  try {
-    const { name, email, password, phone, location, vehicle_type, latitude, longitude, number_plate } = req.body;
-    const role = "rider";
-
-    // Basic validation
-    if (!name || !email || !password || !phone || !location || !vehicle_type || !number_plate) {
-      return res.status(400).json({ error: "All fields are required." });
-    }
-
-    // Check for existing rider
-    const existing = await Rider.findOne({ email });
-    if (existing) {
-      return res.status(400).json({ error: "Rider with this email already exists." });
-    }
-
-    // Create new rider
-    const newRider = new Rider({
-      name,
-      email,
-      password,
-      phone,
-      location,
-      role,
-      vehicle_type,
-      latitude: latitude || null,
-      longitude: longitude || null,
-      number_plate
-    });
-
-    await newRider.save();
-
-    // Generate JWT token
-    const token = await Rider.matchPassword(email, password);
-
-    // Set token in cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-    res.json({ success: true, token, role: "rider", user: newRider, redirectUrl: "/rider/dashboard" });
-  } catch (err) {
-    console.error("Rider signup failed:", err);
-    res.status(500).json({ error: "Server error. Try again." });
-  }
+  res.status(501).json({ error: "Use /signup with role=rider" });
 };
 
-// Update rider location by ID
+// ── updateLocationById ────────────────────────────────────────────────────────
+
 const updateLocationById = async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
@@ -172,29 +87,26 @@ const updateLocationById = async (req, res) => {
       return res.status(400).json({ error: "Latitude and longitude required" });
     }
 
-    const rider = await Rider.findByIdAndUpdate(riderId, {
-      latitude,
-      longitude,
-    }, { new: true });
+    const updatedRider = await riderRepository.updateRiderLocationDb(riderId, latitude, longitude);
 
-    if (!rider) return res.status(404).json({ error: "Rider not found" });
+    if (!updatedRider) {
+      return res.status(404).json({ error: "Rider not found" });
+    }
 
-    res.json({ message: "Location updated", rider });
+    res.json({ message: "Location updated", rider: updatedRider });
   } catch (err) {
     console.error("Location update failed:", err);
     res.status(500).json({ error: "Failed to update location" });
   }
 };
 
-// Update current rider's location
 const updateLocation = async (req, res) => {
   try {
-    const riderId = req.user._id;
+    const riderId = req.user.id;
     const { latitude, longitude } = req.body;
 
-    // Save to Redis
     const redisKey = `rider:location:${riderId}`;
-    await setCache(redisKey, { latitude, longitude }, 600); // cache for 10 mins
+    await setCache(redisKey, { latitude, longitude }, 600); // 10 mins
 
     res.status(200).json({ message: "Location updated" });
   } catch (err) {
@@ -203,161 +115,82 @@ const updateLocation = async (req, res) => {
   }
 };
 
-// Get pending orders
 const getPendingOrders = async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    //Use aggregation pipeline instead of populate to avoid N+1 query problem
-    // This makes 1 query instead of 1 + n*2 (n = number of orders)
-    const orders = await Order.aggregate([
-      {
-        $match: {
-          status: "confirmed",
-          deliveryDate: { $gte: today },
-          ignoredBy: { $not: { $elemMatch: { riderId: req.user._id } } }
-        }
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "userDetails"
-        }
-      },
-      {
-        $lookup: {
-          from: "products",
-          localField: "productId",
-          foreignField: "_id",
-          as: "productDetails"
-        }
-      },
-      {
-        $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: true }
-      },
-      {
-        $unwind: { path: "$productDetails", preserveNullAndEmptyArrays: true }
-      },
-      {
-        $sort: { deliveryDate: 1 }
-      },
-      {
-        $project: {
-          _id: 1,
-          deliveryDate: 1,
-          deliverySlot: 1,
-          address: 1,
-          userName: "$userDetails.name",
-          userLocation: "$location",
-          productName: "$productDetails.name",
-          status: 1,
-          phoneNumber: 1,
-          paid: 1
-        }
-      }
-    ]);
+    const orders = await riderRepository.getConfirmedOrdersForLocation(req.user.id, req.user.location);
 
     const groupedOrders = {};
-
-    orders.forEach(order => {
-      const dateKey = new Date(order.deliveryDate).toDateString();
-
-      if (!groupedOrders[dateKey]) {
-        groupedOrders[dateKey] = [];
-      }
-
+    orders.forEach((order) => {
+      const dateKey = new Date(order.delivery_date).toDateString();
+      if (!groupedOrders[dateKey]) groupedOrders[dateKey] = [];
       groupedOrders[dateKey].push(order);
     });
 
-    // Sort slots inside each group by slot order
-    Object.keys(groupedOrders).forEach(date => {
+    Object.keys(groupedOrders).forEach((date) => {
       groupedOrders[date].sort(
-        (a, b) => slotOrder[a.deliverySlot] - slotOrder[b.deliverySlot]
+        (a, b) => (slotOrder[a.delivery_slot] || 99) - (slotOrder[b.delivery_slot] || 99)
       );
     });
 
-    res.json({
-      success: true,
-      user: req.user,
-      groupedOrders,
-      status: "confirmed"
-    });
+    res.json({ success: true, user: req.user, groupedOrders, status: "confirmed" });
   } catch (err) {
     console.error("Error fetching confirmed orders:", err);
     res.status(500).json({ error: "Server Error" });
   }
 };
 
-// Get today's orders
 const getTodayOrders = async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = new Date().toISOString().split("T")[0];
+    const orders = await riderRepository.getTodaysAcceptedOrders(req.user.id, todayStr);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Fetch only accepted orders for the logged-in rider and today's delivery
-    const orders = await Order.find({
-      status: { $in: ["accepted", "out-for-delivery", "delivered"] },
-      riderId: req.user._id,
-      deliveryDate: { $gte: today, $lt: tomorrow }
-    })
-      .populate("userId")
-      .populate("productId");
-
-    // Group orders by time slot
+    // Group by delivery slot
     const groupedSlots = {};
-    orders.forEach(order => {
-      const slot = order.deliverySlot;
+    orders.forEach((order) => {
+      const slot = order.delivery_slot;
       if (!groupedSlots[slot]) groupedSlots[slot] = [];
-
       groupedSlots[slot].push({
-        _id: order._id,
-        deliveryDate: order.deliveryDate,
-        deliverySlot: slot,
+        id: order.id,
+        delivery_date: order.delivery_date,
+        delivery_slot: slot,
         address: order.address,
-        userName: order.userId?.name,
-        userLocation: order.location,
-        productName: order.productId?.name,
+        user_name: order.user_name,
+        user_location: order.user_location,
+        items: order.items,
         status: order.status,
-        payment: order.paid ? "prepaid" : "cod"
+        payment: order.paid ? "prepaid" : "cod",
       });
     });
 
-    // BUG #26 FIX: Sort slots in correct order using slotOrder mapping
+    // Sort slots in correct order, sort within slots by user name
     const sortedGroupedSlots = Object.keys(slotOrder)
-      .filter(slot => groupedSlots[slot])
+      .filter((slot) => groupedSlots[slot])
       .reduce((acc, slot) => {
-        // Within each slot, sort orders by userName for consistency
-        groupedSlots[slot].sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+        groupedSlots[slot].sort((a, b) =>
+          (a.user_name || "").localeCompare(b.user_name || "")
+        );
         acc[slot] = groupedSlots[slot];
         return acc;
       }, {});
 
-    res.json({
-      success: true,
-      user: req.user,
-      groupedSlots: sortedGroupedSlots
-    });
+    res.json({ success: true, user: req.user, groupedSlots: sortedGroupedSlots });
   } catch (err) {
     console.error("Error fetching today's orders:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// Mark order as out for delivery
 const markOrderOutForDelivery = async (req, res) => {
   try {
     const { orderId } = req.body;
 
-    await Order.findByIdAndUpdate(orderId, {
-      status: "out-for-delivery",
-      riderId: req.user._id
-    });
+    const updated = await riderRepository.markOrderOutForDeliveryDb(orderId, req.user.id);
+
+    if (!updated) {
+      return res.status(403).json({
+        error: "Unauthorized or invalid status transition",
+      });
+    }
 
     res.json({ success: true, message: "Order Out for Delivery" });
   } catch (err) {
@@ -366,13 +199,20 @@ const markOrderOutForDelivery = async (req, res) => {
   }
 };
 
-// Mark order as complete
 const markOrderComplete = async (req, res) => {
   try {
     const { orderId } = req.body;
-    await Order.findByIdAndUpdate(orderId, {
-      status: "delivered"
-    });
+
+    const updated = await riderRepository.markOrderCompleteDb(orderId, req.user.id);
+
+    if (!updated) {
+      return res.status(403).json({
+        error: "Unauthorized or invalid status transition",
+      });
+    }
+
+    // Increment the rider's lifetime completed order tally
+    await riderRepository.incrementRiderOrderCount(req.user.id);
 
     res.json({ success: true, message: "Order Delivered" });
   } catch (err) {
@@ -381,114 +221,84 @@ const markOrderComplete = async (req, res) => {
   }
 };
 
-// Get accepted orders
 const getAcceptedOrders = async (req, res) => {
   try {
-    const riderId = req.user._id;
-    const activeOrders = await Order.find({
-      riderId: riderId,
-      status: { $in: ["accepted", "out-for-delivery"] }
-    })
-      .populate("userId")
-      .populate("productId")
-      .sort({ deliveryDate: 1, deliverySlot: 1 });
+    const riderId = req.user.id;
+    const orders = await riderRepository.getActiveOrders(riderId);
 
-    // Group orders by delivery date
     const grouped = {};
-    activeOrders.forEach(order => {
-      const dateKey = new Date(order.deliveryDate).toDateString();
+    orders.forEach((order) => {
+      const dateKey = new Date(order.delivery_date).toDateString();
       if (!grouped[dateKey]) grouped[dateKey] = [];
-
       grouped[dateKey].push({
-        _id: order._id,
-        productName: order.productId?.name,
-        userName: order.userId?.name,
-        phoneNumber: order.phoneNumber || order.userId?.phone,
+        id: order.id,
+        items: order.items,
+        user_name: order.user_name,
+        phone: order.phone || order.user_phone,
         address: order.address,
-        userLocation: order.location,
-        deliverySlot: order.deliverySlot,
+        user_location: order.user_location,
+        delivery_slot: order.delivery_slot,
         status: order.status,
         payment: order.paid ? "Prepaid" : "COD",
-        amount: order.productId?.price
+        amount: order.total,
       });
     });
 
-    res.json({
-      success: true,
-      user: req.user,
-      groupedOrders: grouped
-    });
+    res.json({ success: true, user: req.user, groupedOrders: grouped });
   } catch (err) {
     console.error("Error fetching active rider orders:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// Get completed orders
 const getCompletedOrders = async (req, res) => {
   try {
-    const riderId = req.user._id;
-    const deliveredOrders = await Order.find({
-      riderId: riderId,
-      status: "delivered"
-    })
-      .populate("userId")
-      .populate("productId")
-      .sort({ deliveryDate: -1, deliverySlot: 1 });
+    const riderId = req.user.id;
+    const orders = await riderRepository.getDeliveredOrders(riderId);
 
-    // Group by delivery date
     const grouped = {};
-    deliveredOrders.forEach(order => {
-      const dateKey = new Date(order.deliveryDate).toDateString();
+    orders.forEach((order) => {
+      const dateKey = new Date(order.delivery_date).toDateString();
       if (!grouped[dateKey]) grouped[dateKey] = [];
-
       grouped[dateKey].push({
-        _id: order._id,
-        productName: order.productId?.name,
-        userName: order.userId?.name,
-        phoneNumber: order.phoneNumber || order.userId?.phone, // Phone fallback
+        id: order.id,
+        items: order.items,
+        user_name: order.user_name,
+        phone: order.phone || order.user_phone,
         address: order.address,
-        userLocation: order.location, // Map string or coords if available
-        deliverySlot: order.deliverySlot,
+        user_location: order.user_location,
+        delivery_slot: order.delivery_slot,
         status: order.status,
         payment: order.paid ? "Prepaid" : "COD",
-        amount: order.productId?.price // Useful to show amount to collect
+        amount: order.total,
       });
     });
 
-    res.json({
-      success: true,
-      user: req.user,
-      groupedOrders: grouped
-    });
+    res.json({ success: true, user: req.user, groupedOrders: grouped });
   } catch (err) {
     console.error("Error fetching completed orders:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// Get unaccepted orders
 const getUnacceptedOrders = async (req, res) => {
   try {
-    const now = new Date();
-    const orders = await Order.find({ status: "missed" });
+    const missedOrders = await riderRepository.getMissedOrders();
+    const slotStartHours = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
 
-    const unacceptedOrders = orders.filter(order => {
-      const slotStartHour = slotOrder[order.deliverySlot];
-      if (!slotStartHour) return false;
-
-      const slotStart = new Date(order.deliveryDate);
-      slotStart.setHours(slotStartHour, 0, 0, 0);
-
-      return now >= slotStart;
+    const unacceptedOrders = missedOrders.filter((order) => {
+      const slotHour = slotStartHours[order.delivery_slot];
+      if (!slotHour) return false;
+      const slotStart = new Date(order.delivery_date);
+      slotStart.setHours(slotHour, 0, 0, 0);
+      return new Date() >= slotStart;
     });
 
-    // BUG #28 FIX: Return JSON API response instead of HTML
     res.json({
       success: true,
       user: req.user,
       unacceptedOrders,
-      count: unacceptedOrders.length
+      count: unacceptedOrders.length,
     });
   } catch (err) {
     console.error("Error fetching unaccepted orders:", err);
@@ -496,27 +306,23 @@ const getUnacceptedOrders = async (req, res) => {
   }
 };
 
-// Update order delivery slot
 const updateOrderSlot = async (req, res) => {
   try {
     const { orderId, newDate, newSlot } = req.body;
-    
-    // BUG #27 FIX: Verify rider owns this order before updating
-    const order = await Order.findById(orderId);
-    if (!order) {
+
+    const orderData = await riderRepository.getOrderOwnership(orderId);
+
+    if (!orderData) {
       return res.status(404).json({ error: "Order not found" });
     }
-    
-    // Only the assigned rider can update the delivery slot
-    if (order.riderId && order.riderId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Unauthorized: You can only modify your own orders" });
+
+    if (orderData.rider_id && orderData.rider_id !== req.user.id) {
+      return res.status(403).json({
+        error: "Unauthorized: You can only modify your own orders",
+      });
     }
-    
-    await Order.findByIdAndUpdate(orderId, {
-      deliveryDate: new Date(newDate),
-      deliverySlot: newSlot,
-      status: "confirmed"
-    });
+
+    await riderRepository.updateDeliverySlotDb(orderId, newDate, newSlot);
 
     res.json({ success: true, message: "Order slot updated" });
   } catch (err) {
@@ -525,47 +331,50 @@ const updateOrderSlot = async (req, res) => {
   }
 };
 
-// Get order details
 const getOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id)
-      .populate("userId", "name email phone address location")
-      .populate("productId", "name price image description duration category");
 
-    if (!order) {
+    const row = await riderRepository.getOrderDetailsDb(id);
+
+    if (!row) {
       return res.status(404).json({ success: false, error: "Order not found" });
     }
 
-    if (order.status !== 'confirmed' && order.riderId && order.riderId.toString() !== req.user._id.toString()) {
+    // Auth: confirmed orders visible to any rider; accepted+ only to assigned rider
+    if (row.status !== "confirmed" && row.rider_id && row.rider_id !== req.user.id) {
       return res.status(403).json({ success: false, error: "Unauthorized" });
     }
 
     res.json({
       success: true,
       order: {
-        _id: order._id,
-        product: order.productId,
-        user: order.userId,
-        deliverySlot: order.deliverySlot,
-        status: order.status,
-        paymentMode: order.paid ? "Prepaid" : "COD",
-        amount: order.productId?.price,
-        orderDate: order.orderDate,
-        phoneNumber: order.phoneNumber || order.userId?.phone,
-        latitude: order.lat || order.userId?.latitude,
-        longitude: order.lng || order.userId?.longitude,
-        address: order.address || order.userId?.address
-      }
+        id: row.id,
+        items: row.items,
+        user: {
+          name: row.user_name,
+          email: row.user_email,
+          phone: row.user_phone,
+          address: row.user_address,
+          location: row.user_location_field,
+        },
+        delivery_slot: row.delivery_slot,
+        delivery_date: row.delivery_date,
+        status: row.status,
+        payment_mode: row.paid ? "Prepaid" : "COD",
+        amount: row.total,
+        phone: row.phone || row.user_phone,
+        latitude: row.latitude || row.user_latitude,
+        longitude: row.longitude || row.user_longitude,
+        address: row.address || row.user_address,
+      },
     });
-
   } catch (error) {
     console.error("Error fetching order details:", error);
     res.status(500).json({ success: false, error: "Server error" });
   }
 };
 
-// Export all controller methods
 module.exports = {
   acceptOrder,
   rejectOrder,
@@ -581,5 +390,5 @@ module.exports = {
   getCompletedOrders,
   getUnacceptedOrders,
   updateOrderSlot,
-  getOrderDetails
+  getOrderDetails,
 };

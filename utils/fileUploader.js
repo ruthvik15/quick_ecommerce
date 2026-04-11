@@ -27,14 +27,14 @@ const storage = new CloudinaryStorage({
   },
 });
 
-// FIXED: Add file size limits (5MB) and server-side file type validation
+
 const upload = multer({ 
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    // FIXED: Validate file type on server side as backup security measure
+
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);

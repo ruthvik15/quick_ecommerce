@@ -17,23 +17,23 @@ const client = createClient({
   }
 });
 
-// FIXED: Add proper event listeners for health monitoring
-client.on("error", (err) => console.error("❌ Redis Error:", err));
-client.on("connect", () => console.log("✅ Redis Connected"));
-client.on("ready", () => console.log("✅ Redis Ready"));
-client.on("reconnecting", () => console.log("🔄 Redis Reconnecting..."));
+
+client.on("error", (err) => console.error("Redis Error:", err));
+client.on("connect", () => console.log("Redis Connected"));
+client.on("ready", () => console.log("Redis Ready"));
+client.on("reconnecting", () => console.log("Redis Reconnecting..."));
 
 async function connectRedis() {
   try {
     await client.connect();
-    // FIXED: Proper health check with ping
+
     const pong = await client.ping();
     if (pong === 'PONG') {
       await client.set('heartbeat', 'ok', { EX: 300 });
-      console.log("✅ Redis is Ready");
+      console.log("Redis is Ready");
     }
   } catch (err) {
-    console.error("❌ Redis Failed to Connect:", err.message);
+    console.error("Redis Failed to Connect:", err.message);
     throw err;
   }
 }

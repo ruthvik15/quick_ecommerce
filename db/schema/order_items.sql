@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+
+  name TEXT, 
+  quantity INTEGER NOT NULL CHECK (quantity >= 1),
+  price DOUBLE PRECISION NOT NULL,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

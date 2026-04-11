@@ -6,7 +6,8 @@ const {
   removeFromCart,
   addToCart,
   increaseQuantity,
-  decreaseQuantity
+  decreaseQuantity,
+  syncCart,
 } = require("../controllers/cartController");
 
 // authentication is mandatory for the cart routes
@@ -17,5 +18,7 @@ router.post("/remove", removeFromCart);
 router.post("/add", addToCart);
 router.post("/increase", increaseQuantity);
 router.post("/decrease", decreaseQuantity);
+// Called by the client after the user changes their selected city
+router.put("/sync", syncCart);
 
 module.exports = router;

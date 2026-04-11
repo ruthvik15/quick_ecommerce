@@ -3,58 +3,48 @@ require("dotenv").config();
 
 const secret = process.env.JWT_SECRET;
 
-
 if (!secret) {
-  console.error('ERROR: JWT_SECRET not configured in environment variables');
   process.exit(1);
 }
 
-const ALLOWED_FIELDS = [
-  "_id",
+const FIELDS = [
+  "id",
   "name",
   "email",
-  "role",         
-  "location", 
+  "role",
+  "location",
   "phone",
-  "address",  
-  "latitude", 
-  "longitude", 
-  "vehicle_type"  
+  "address",
+  "latitude",
+  "longitude",
+  "vehicle_type"
 ];
 
-function createtoken(user) {
-  const payload = {};
-
-  ALLOWED_FIELDS.forEach((field) => {
-    if (user[field] !== undefined && user[field] !== null) {
-      payload[field] = user[field];
-    }
+const createtoken = (user) => {
+  const payloadEntries = Object.entries(user).filter(([k, v]) => {
+    return FIELDS.includes(k) && v != null;
   });
 
-  return JWT.sign(payload, secret, { expiresIn: "7d" });
-}
+  const payload = Object.fromEntries(payloadEntries);
 
-function validatetoken(token) {
-  try {
-    if (!token) {
-      const error = new Error('No token provided');
-      error.name = 'NoTokenError';
-      throw error;
-    }
-    return JWT.verify(token, secret);
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      throw new Error('Token expired');
-    } else if (error.name === 'JsonWebTokenError') {
-      throw new Error('Invalid token');
-    } else if (error.name === 'NoTokenError') {
-      throw error;
-    } else {
-      console.error('Unexpected token validation error:', error);
-    }
-    return null;
+  return JWT.sign(payload, secret, { expiresIn: "7d" });
+};
+
+const validatetoken = (token) => {
+  if (!token) {
+    throw new Error("No token provided");
   }
-}
+
+  try {
+    return JWT.verify(token, secret);
+  } catch (e) {
+    if (e.name === "TokenExpiredError") {
+      throw new Error("Token expired");
+    } else {
+      throw new Error("Invalid token");
+    }
+  }
+};
 
 module.exports = {
   createtoken,
