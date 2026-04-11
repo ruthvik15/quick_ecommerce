@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS rider_slots (
+  id SERIAL PRIMARY KEY,
+  rider_id INTEGER REFERENCES riders(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  slot TEXT NOT NULL,
+  count INTEGER DEFAULT 0
+);

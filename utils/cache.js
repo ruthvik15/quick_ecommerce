@@ -1,4 +1,4 @@
-// 1. Destructure to get the actual client!
+
 const { client } = require("./redisClient"); 
 
 const getCache = async (key) => {
@@ -36,7 +36,7 @@ const delCachePattern = async (pattern) => {
     const keys = await client.keys(pattern);
     if (keys.length === 0) return 0;
     const deletedCount = await client.del(keys);
-    console.log(`🗑️  Deleted ${deletedCount} cache keys matching pattern: ${pattern}`);
+    console.log(` Deleted ${deletedCount} cache keys matching pattern: ${pattern}`);
     return deletedCount;
   } catch (err) {
     console.error("Redis PATTERN DEL error for pattern "+pattern+":", err.message);

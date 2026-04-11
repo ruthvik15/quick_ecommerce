@@ -22,7 +22,6 @@ const cartSchema = new Schema({
       }
     }
   ],
-  // BUG #12 FIX: Track cart location to ensure all items are from same city
   location: {
     type: String,
     enum: ["hyderabad", "bengaluru", "mumbai", "delhi"],

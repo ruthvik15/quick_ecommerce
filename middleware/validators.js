@@ -2,89 +2,145 @@
 // Prevents common invalid inputs from reaching controllers
 
 const validateEmail = (email) => {
+  if(!email) return false;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
 
 const validatePhone = (phone) => {
-  // Accept 10-digit phone numbers
+  if(!phone) return false;
   const phoneRegex = /^\d{10}$/;
   return phoneRegex.test(phone?.toString()?.replace(/\D/g, ''));
 };
 
 const validateLocation = (location) => {
+  if(!location) return false;
   const validLocations = ['hyderabad', 'bengaluru', 'mumbai', 'delhi'];
   return validLocations.includes(location?.toLowerCase());
 };
 
 const validatePrice = (price) => {
+  if(!price) return false;
   const num = parseFloat(price);
   return !isNaN(num) && num >= 0;
 };
 
 const validateQuantity = (quantity) => {
+  if(!quantity) return false;
   const num = parseInt(quantity);
   return !isNaN(num) && num > 0;
 };
 
-// Middleware for login route (email and password only)
+const ValidatePassword = (password) => {
+  if(!password || password.length < 6) return false;
+  return true;
+};
+
+const ValidateName = (name) => {
+  if(!name || name.trim().length < 2) return false;
+  return true;
+};
+
+const ValidateAddress = (address) => {
+  if(!address || address.trim().length < 5) return false;
+  return true;
+};
+
+const ValidateDeliveryDate = (deliveryDate) => {
+  if(!deliveryDate) return false;
+  const date = new Date(deliveryDate);
+  return !isNaN(date.getTime());
+};
+
+const ValidateDeliverySlot = (deliverySlot) => {
+  if(!deliverySlot) return false;
+  const validSlots = ['10-12', '12-2', '2-4', '4-6'];
+  return validSlots.includes(deliverySlot);
+};
+
+const ValidateCoordinates = (latitude, longitude) => {
+  if(latitude === undefined || longitude === undefined) return false;
+  return !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude));
+};
+
+const ValidateRole = (role) => {
+  if(!role) return false;
+  const validRoles = ['user', 'seller', 'rider'];
+  return validRoles.includes(role.toLowerCase());
+};
+
+const ValidateRating = (rating) => {
+  if(!rating || rating < 1 || rating > 5) return false;
+  return true;
+};
+
+const ValidateComment = (comment) => {
+  if(!comment || comment.trim().length < 5) return false;
+  return true;
+};
+
+
 const validateLoginInput = (req, res, next) => {
   const { email, password } = req.body;
 
-  if (!email || !validateEmail(email)) {
+  if (!validateEmail(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
 
-  if (!password || password.length < 6) {
+  if (!ValidatePassword(password)) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  if (!ValidateRole(req.body.role)) {
+    return res.status(400).json({ error: 'Valid role is required' });
   }
 
   next();
 };
 
-// Middleware for signup route (includes name, phone, etc.)
 const validateSignupInput = (req, res, next) => {
   const { email, password, phone, name } = req.body;
 
-  if (!email || !validateEmail(email)) {
+  if (!validateEmail(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
 
-  if (!password || password.length < 6) {
+  if (!ValidatePassword(password)) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
-  if (phone && !validatePhone(phone)) {
+  if (!validatePhone(phone)) {
     return res.status(400).json({ error: 'Invalid phone number format (10 digits required)' });
   }
 
-  if (!name || name.trim().length < 2) {
+  if (!ValidateName(name)) {
     return res.status(400).json({ error: 'Name must be at least 2 characters' });
+  }
+
+  if (!ValidateRole(req.body.role)) {
+    return res.status(400).json({ error: 'Valid role is required' });
   }
 
   next();
 };
 
-// DEPRECATED: Use validateLoginInput or validateSignupInput instead
-const validateAuthInput = validateSignupInput;
 
-// Middleware for product operations
 const validateProductInput = (req, res, next) => {
   const { name, price, quantity, location, category } = req.body;
 
-  if (name && name.trim().length < 2) {
+  if (!ValidateName(name)) {
     return res.status(400).json({ error: 'Product name must be at least 2 characters' });
   }
 
-  if (price !== undefined && !validatePrice(price)) {
+  if (!validatePrice(price)) {
     return res.status(400).json({ error: 'Price must be a positive number' });
   }
 
-  if (quantity !== undefined && !validateQuantity(quantity)) {
+  if (!validateQuantity(quantity)) {
     return res.status(400).json({ error: 'Quantity must be a positive integer' });
   }
 
-  if (location && !validateLocation(location)) {
+  if (!validateLocation(location)) {
     return res.status(400).json({ error: 'Invalid location' });
   }
 
@@ -96,63 +152,49 @@ const validateProductInput = (req, res, next) => {
   next();
 };
 
-// Middleware for review input
 const validateReviewInput = (req, res, next) => {
   const { rating, comment } = req.body;
 
-  if (!rating || rating < 1 || rating > 5) {
+  if (!ValidateRating(rating)) {
     return res.status(400).json({ error: 'Rating must be between 1 and 5' });
   }
 
-  if (!comment || comment.trim().length < 5) {
+  if (!ValidateComment(comment)) {
     return res.status(400).json({ error: 'Comment must be at least 5 characters' });
   }
-
   next();
 };
 
-// Middleware for checkout input
+
 const validateCheckoutInput = (req, res, next) => {
   const { deliveryDate, deliverySlot, latitude, longitude, address, phone } = req.body;
 
-  if (!deliveryDate) {
+  if (!ValidateDeliveryDate(deliveryDate)) {
     return res.status(400).json({ error: 'Delivery date is required' });
   }
 
-  const validSlots = ['10-12', '12-2', '2-4', '4-6'];
-  if (!validSlots.includes(deliverySlot)) {
+  if (!ValidateDeliverySlot(deliverySlot)) {
     return res.status(400).json({ error: 'Invalid delivery slot' });
   }
 
-  if (latitude === undefined || longitude === undefined) {
+  if (!ValidateCoordinates(latitude, longitude)) {
     return res.status(400).json({ error: 'Coordinates are required' });
   }
 
-  if (isNaN(parseFloat(latitude)) || isNaN(parseFloat(longitude))) {
-    return res.status(400).json({ error: 'Invalid coordinates format' });
-  }
-
-  if (!address || address.trim().length < 5) {
+  if (!ValidateAddress(address)) {
     return res.status(400).json({ error: 'Address must be at least 5 characters' });
   }
 
-  if (phone && !validatePhone(phone)) {
+  if (!validatePhone(phone)) {
     return res.status(400).json({ error: 'Invalid phone number' });
   }
-
   next();
 };
 
 module.exports = {
   validateLoginInput,
   validateSignupInput,
-  validateAuthInput, // Deprecated, kept for backward compatibility
   validateProductInput,
   validateReviewInput,
   validateCheckoutInput,
-  validateEmail,
-  validatePhone,
-  validateLocation,
-  validatePrice,
-  validateQuantity
 };

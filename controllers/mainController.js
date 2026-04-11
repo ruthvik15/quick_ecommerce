@@ -1,16 +1,8 @@
-const path = require("path");
-const User = require("../models/user");
-const Product = require("../models/product");
-const Cart = require("../models/cart");
-const Rider = require("../models/rider");
-const Seller = require("../models/seller");
-const Order = require("../models/order");
+const mainRepository = require("../repositories/mainRepository");
 const { getCache, setCache } = require("../utils/cache");
-const razorpay = require("../utils/razorpay");
 const { createtoken } = require("../utils/auth");
-
-const cityCoords = require("../utils/cityCoordinates");
-const getDistanceKm = require("../utils/distance");
+const { signupByRole } = require("../services/signup");
+const { loginByRole } = require("../services/login");
 
 const setLocation = (req, res) => {
   const loc = req.query.loc?.toLowerCase();
@@ -19,250 +11,154 @@ const setLocation = (req, res) => {
   res.cookie("selectedLocation", loc, {
     maxAge: 30 * 24 * 60 * 60 * 1000,
     secure: true,
-    sameSite: 'none'
+    sameSite: "none",
   });
   res.redirect("/");
 };
 
 const renderHome = async (req, res) => {
-  const selectedLocation = req.query.location || req.cookies.selectedLocation || req.user?.location || "hyderabad";
-  const { category, sort, page = 1, limit = 20 } = req.query; // Changed default limit to 20
-
-
-  // BUG #12 FIX: Check if user has cart items from different location and remove them
-  let cartLocationMismatch = false;
-  if (req.user) {
-    const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
-    if (cart && cart.items.length > 0) {
-      // Filter out items from different locations
-      const originalLength = cart.items.length;
-      cart.items = cart.items.filter(item => {
-        if (item.product && item.product.location.toLowerCase() !== selectedLocation.toLowerCase()) {
-          return false; // Remove item from different location
-        }
-        return true;
-      });
-      
-      // If items were removed, save cart and notify user
-      if (cart.items.length < originalLength) {
-        // Update cart location to current selected location if cart still has items
-        if (cart.items.length > 0) {
-          cart.location = selectedLocation.toLowerCase();
-        } else {
-          // Cart is now empty, clear location
-          cart.location = null;
-        }
-        await cart.save();
-        cartLocationMismatch = true;
-      } else if (!cart.location) {
-        // Cart hasn't been updated with location yet, set it now
-        cart.location = selectedLocation.toLowerCase();
-        await cart.save();
-      }
-    }
-  }
+  const selectedLocation =
+    req.query.location ||
+    req.cookies.selectedLocation ||
+    req.user?.location ||
+    "hyderabad";
+  const { category, sort, page = 1, limit = 20 } = req.query;
 
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
-  const skip = (pageNum - 1) * limitNum;
+  const offset = (pageNum - 1) * limitNum;
 
-  const filter = { location: selectedLocation, status: { $ne: "stopped" } };
-  const sortOption = {};
-
-  if (category && category !== "All Products") filter.category = category.toLowerCase();
-
-  if (sort === "low-high") sortOption.price = 1;
-  else if (sort === "high-low") sortOption.price = -1;
-  else if (sort === "newest") sortOption.createdAt = -1;
-
-  //Smart page-wise caching strategy
-  // Only cache "all" category for pages 1-5 (first 100 products)
-  // Other categories always query DB (stays fresh)
-  // TTL: 3 minutes (invalidate frequently)
-  
-  const isAllCategory = !category || category === "All Products";
-  const shouldCache = isAllCategory && pageNum <= 5; // Only cache first 5 pages
-  
-  let products;
-  
-  if (shouldCache) {
-    // TRY TO GET FROM CACHE (only for pages 1-5 of "all" category)
-    const cacheKey = `products:${selectedLocation}:all:${sort || "default"}:page:${pageNum}:${limitNum}`;
-    const cached = await getCache(cacheKey);
-    
-    if (cached) {
-      // Cache hit - super fast!
-      return res.json({ success: true, ...cached, user: req.user });
-    }
-    
-    // Cache miss - query DB and cache this page
-    products = await Product.find(filter)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNum);
-    
-    // Calculate hasNextPage for this page
-    const allCountForPrefix = await Product.countDocuments(filter);
-    const hasNextPage = (skip + limitNum) < allCountForPrefix;
-    
-    const categories = ["All Products", "groceries", "electronics", "clothing", "food"];
-    const responseData = {
-      products,
-      categories,
-      selectedLocation,
-      selectedCategory: category || "",
-      selectedSort: sort || "",
-      pagination: { 
-        currentPage: pageNum, 
-        limit: limitNum, 
-        hasNextPage,
-        totalItems: allCountForPrefix
-      },
-      cartLocationMismatch // Notify frontend if cart items were removed
-    };
-    
-    // Cache this specific page for 3 minutes
-    await setCache(cacheKey, responseData, 180);
-    return res.json({ success: true, ...responseData, user: req.user });
-    
-  } else {
-    // OTHER CATEGORIES or pages > 5: Direct DB query (no caching)
-    // Always fresh data, no memory bloat
-    products = await Product.find(filter)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNum);
-    
-    // Check if there's a next page
-    const allCountForCategory = await Product.countDocuments(filter);
-    const hasNextPage = (skip + limitNum) < allCountForCategory;
-    
-    const categories = ["All Products", "groceries", "electronics", "clothing", "food"];
-    const responseData = {
-      products,
-      categories,
-      selectedLocation,
-      selectedCategory: category || "",
-      selectedSort: sort || "",
-      pagination: { 
-        currentPage: pageNum, 
-        limit: limitNum, 
-        hasNextPage,
-        totalItems: allCountForCategory
-      },
-      cartLocationMismatch // Notify frontend if cart items were removed
-    };
-    
-    return res.json({ success: true, ...responseData, user: req.user });
+  let cartLocationMismatch = false;
+  if (req.user) {
+    cartLocationMismatch = await mainRepository.checkCartLocationMismatch(req.user.id, selectedLocation);
   }
-};
 
+  const params = [selectedLocation];
+  let whereClause = "WHERE location = $1 AND status != 'stopped'";
+  let paramIndex = 2;
+
+  if (category && category !== "All Products") {
+    whereClause += ` AND category = $${paramIndex++}`;
+    params.push(category.toLowerCase());
+  }
+
+  let orderBy = "";
+  if (sort === "low-high") orderBy = "ORDER BY price ASC";
+  else if (sort === "high-low") orderBy = "ORDER BY price DESC";
+  else if (sort === "newest") orderBy = "ORDER BY created_at DESC";
+
+  const categories = [
+    "All Products",
+    "groceries",
+    "electronics",
+    "clothing",
+    "food",
+  ];
+
+  const isAllCategory = !category || category === "All Products";
+  const shouldCache = isAllCategory && pageNum <= 5;
+
+  // Cache-busting bucket: round current time to the nearest 3-minute window
+  const bucketMs = 3 * 60 * 1000;
+  const timeBucket = Math.floor(Date.now() / bucketMs);
+
+  const cacheKey = shouldCache
+    ? `products:${selectedLocation}:all:${sort || "default"}:page:${pageNum}:${limitNum}:b${timeBucket}`
+    : null;
+
+  if (cacheKey) {
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json({ success: true, ...cached, cartLocationMismatch, user: req.user });
+    }
+  }
+
+  const dataParams = [...params, limitNum, offset];
+  const products = await mainRepository.fetchProducts(whereClause, orderBy, dataParams, paramIndex);
+  const totalItems = await mainRepository.countProducts(whereClause, params);
+  
+  const hasNextPage = offset + limitNum < totalItems;
+
+  const globalData = {
+    products,
+    categories,
+    selectedLocation,
+    selectedCategory: category || "",
+    selectedSort: sort || "",
+    pagination: { currentPage: pageNum, limit: limitNum, hasNextPage, totalItems },
+  };
+
+  if (cacheKey) {
+    await setCache(cacheKey, globalData, 180);
+  }
+
+  return res.json({ success: true, ...globalData, cartLocationMismatch, user: req.user });
+};
 
 const login = async (req, res) => {
   const { email, password, role } = req.body;
 
   try {
-    let result, redirectUrl;
+    const { token, user, redirectUrl } = await loginByRole(req.body);
 
-    // matchPassword now returns { token, user } with password already removed
-    if (role === "rider") {
-      result = await Rider.matchPassword(email, password);
-      redirectUrl = "/rider/dashboard";
-    }
-    else if (role === "seller") {
-      result = await Seller.matchPassword(email, password);
-      redirectUrl = "/seller/dashboard";
-    }
-    else {
-      result = await User.matchPassword(email, password);
-      redirectUrl = "/";
-    }
-
-    if (!result || !result.user || !result.token) {
-      return res.status(400).json({ error: "Invalid credentials" });
-    }
-
-    const { token, user } = result;
-
-    // Preserve selectedLocation cookie if it exists, otherwise set to user's location
-    const existingLocation = req.cookies.selectedLocation;
-    if (!existingLocation && user.location) {
+    if (!req.cookies.selectedLocation && user.location) {
       res.cookie("selectedLocation", user.location, {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: false,
-        secure: true,
-        sameSite: 'none'
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       });
     }
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
     });
-    
-    return res.json({ success: true, token, role, user: { _id: user._id, name: user.name, email: user.email, role: user.role }, redirectUrl });
 
+    return res.json({ success: true, token, role, user, redirectUrl });
   } catch (error) {
     console.error("Login error:", error);
-    return res.status(400).json({ error: "Email or password incorrect." });
+    return res.status(400).json({ error: "Email or password incorrect" });
   }
 };
 
 const signup = async (req, res) => {
-  const { name, email, password, phone, location, role, vehicle_type, address, shopName } = req.body;
-
-  if (!name || !email || !password || !phone || !location || !role) {
-    return res.status(400).json({ error: "All fields are required." });
-  }
+  const { name, email, password, phone, location, role } = req.body;
 
   try {
-    let newUser, redirectUrl;
+    const { user, redirectUrl } = await signupByRole(req.body);
+    const token = createtoken(user);
 
-    if (role === "rider") {
-      if (!vehicle_type || !address) return res.status(400).json({ error: "Vehicle and Address required." });
-      newUser = new Rider({ name, email, password, phone, location, role, vehicle_type, address });
-      redirectUrl = "/rider/dashboard";
-    }
-    else if (role === "seller") {
-      if (!address || !shopName) return res.status(400).json({ error: "Shop Name and Address required." });
-      newUser = new Seller({ name, email, password, phone, location, role, address, shopName });
-      redirectUrl = "/seller/dashboard";
-    }
-    else {
-      newUser = new User({ name, email, password, phone, location, role, address: "" });
-      redirectUrl = "/";
-    }
-
-    await newUser.save();
-    const token = createtoken(newUser);
-
-    // Set selectedLocation cookie if not already set (preserve guest browsing preference)
-    const existingLocation = req.cookies.selectedLocation;
-    if (!existingLocation && location) {
+    if (!req.cookies.selectedLocation && location) {
       res.cookie("selectedLocation", location, {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: false,
         secure: true,
-        sameSite: 'none'
+        sameSite: "none",
       });
     }
 
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
-      sameSite: 'none',
-      maxAge: 7 * 24 * 60 * 60 * 1000
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    // Not sending full user object - only essential fields
-    const userResponse = { _id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role };
-    return res.json({ success: true, token, role, user: userResponse, redirectUrl });
 
+    return res.json({ success: true, token, role, user, redirectUrl });
   } catch (err) {
     console.error("Signup error:", err);
-    if (err.code === 11000) return res.status(400).json({ error: "Email, Phone, or Shop Name already exists." });
-    res.status(500).json({ error: "Server error" });
+    if (err.code === "23505") {
+      return res
+        .status(400)
+        .json({ error: "Email, phone, or shop name already exists" });
+    }
+    if (err.message?.includes("required")) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -270,7 +166,7 @@ const logout = (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: 'strict'
+    sameSite: "strict",
   });
   res.json({ success: true, message: "Logged out successfully" });
 };
@@ -278,95 +174,103 @@ const logout = (req, res) => {
 const trackOrders = async (req, res) => {
   const now = new Date();
   const slotStartHours = { "10-12": 10, "12-2": 12, "2-4": 14, "4-6": 16 };
-  let orders = await Order.find({ userId: req.user._id }).populate("productId").sort({ createdAt: -1 });
+  
+  const orders = await mainRepository.getUserOrders(req.user.id);
+
   let missedOrdersCount = 0;
 
-  for (let order of orders) {
-    //Only mark confirmed orders as missed, not already accepted/out-for-delivery orders
+  for (const order of orders) {
     if (order.status === "confirmed") {
-      const slotHour = slotStartHours[order.deliverySlot];
+      const slotHour = slotStartHours[order.delivery_slot];
       if (slotHour !== undefined) {
-        const slotStart = new Date(order.deliveryDate);
+        const slotStart = new Date(order.delivery_date);
         slotStart.setHours(slotHour, 0, 0, 0);
         if (now >= slotStart) {
           missedOrdersCount++;
+          await mainRepository.markOrderMissed(order.id);
           order.status = "missed";
-          await order.save();
         }
       }
     }
   }
+
   res.json({ success: true, user: req.user, orders, missedOrdersCount });
 };
 
 const cancelOrder = async (req, res) => {
   const { orderId } = req.body;
+  
   try {
-    const order = await Order.findOne({
-      _id: orderId,
-      userId: req.user._id,
-      status: { $in: ["confirmed", "missed"] },
-    });
-    if (!order) return res.status(400).json({ error: "Invalid or already processed order" });
-
-    // Handle refund separately with error handling to prevent race condition
-    let refundFailed = false;
-    if (order.paid && order.razorpay_payment_id) {
-      try {
-        await razorpay.payments.refund(order.razorpay_payment_id, { amount: order.total * 100 });
-      } catch (refundErr) {
-        console.error("Refund failed:", refundErr);
-        refundFailed = true;
-        // Log for manual review - don't proceed if refund fails for paid orders
-        return res.status(500).json({ error: "Refund processing failed. Please contact support.", orderId });
-      }
-    }
-
-    // Only proceed with inventory restoration and cancellation if refund succeeded (or wasn't needed)
-    const updateResult = await Product.findByIdAndUpdate(order.productId, {
-      $inc: { quantity: order.quantity, soldCount: -order.quantity },
-    });
+    const result = await mainRepository.cancelOrderTransaction(orderId, req.user.id);
     
-    if (!updateResult) {
-      return res.status(500).json({ error: "Product update failed. Contact support for refund status." });
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
     }
-
-    order.status = "cancelled";
-    await order.save();
-    res.json({ success: true, message: "Order cancelled successfully" });
+    
+    res.json({ success: true, message: result.message });
   } catch (err) {
-    console.error("Cancel failed:", err);
     res.status(500).json({ error: "Error cancelling order. Please contact support." });
   }
 };
 
 const trackSingleOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.orderId)
-      .populate("riderId")
-      .populate("userId")
-      .populate("productId");
+    const row = await mainRepository.getOrderTrackingDetails(req.params.orderId);
 
-    if (!order || !order.userId) {
+    if (!row) {
       return res.status(404).json({ error: "Order or user info not found" });
     }
 
+    const items = await mainRepository.getOrderItemsWithProductDetails(row.id);
+
+    const order = {
+      id: row.id,
+      user_id: row.user_id,
+      rider_id: row.rider_id,
+      phone: row.phone,
+      address: row.address,
+      location: row.location,
+      total: row.total,
+      paid: row.paid,
+      status: row.status,
+      delivery_date: row.delivery_date,
+      delivery_slot: row.delivery_slot,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      razorpay_payment_id: row.razorpay_payment_id,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      items: items,
+    };
+
+    const rider = row.rider_id
+      ? {
+        id: row.rider_id_val,
+        name: row.rider_name,
+        phone: row.rider_phone,
+        vehicle_type: row.rider_vehicle_type,
+        latitude: row.rider_latitude,
+        longitude: row.rider_longitude,
+        updated_at: row.rider_updated_at,
+      }
+      : null;
+
     let riderCoords = null;
-    if (order.riderId) {
-      const redisKey = `rider:location:${order.riderId._id}`;
+    if (rider) {
+      const redisKey = `rider:location:${rider.id}`;
       const cachedCoords = await getCache(redisKey);
       riderCoords = cachedCoords
         ? { lat: cachedCoords.latitude, lng: cachedCoords.longitude }
-        : { lat: order.riderId.latitude, lng: order.riderId.longitude };
+        : { lat: rider.latitude, lng: rider.longitude };
     }
 
     res.json({
       success: true,
       user: req.user,
       order,
-      rider: order.riderId || null,
-      product: order.productId,
-      userCoords: { lat: order.userId.latitude, lng: order.userId.longitude },
+      rider,
+      product: items[0] || null,
+      userCoords: { lat: row.user_latitude, lng: row.user_longitude },
       riderCoords,
     });
   } catch (err) {
@@ -377,28 +281,25 @@ const trackSingleOrder = async (req, res) => {
 
 const getRiderLocationForOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.orderId)
-      .populate("riderId", "name phone vehicle_type latitude longitude updatedAt");
+    const row = await mainRepository.getOrderAndRiderLocation(req.params.orderId);
 
-    if (!order) {
+    if (!row) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Verify user owns this order
-    if (order.userId.toString() !== req.user._id.toString()) {
+    if (row.user_id !== req.user.id) {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    if (!order.riderId) {
+    if (!row.rider_id) {
       return res.json({
         success: true,
         hasRider: false,
-        message: "No rider assigned yet"
+        message: "No rider assigned yet",
       });
     }
 
-    // Try Redis first (fresh), fallback to DB (stale)
-    const redisKey = `rider:location:${order.riderId._id}`;
+    const redisKey = `rider:location:${row.rider_id}`;
     const cachedCoords = await getCache(redisKey);
 
     let location, lastUpdated, isLive;
@@ -407,8 +308,8 @@ const getRiderLocationForOrder = async (req, res) => {
       lastUpdated = new Date();
       isLive = true;
     } else {
-      location = { lat: order.riderId.latitude, lng: order.riderId.longitude };
-      lastUpdated = order.riderId.updatedAt;
+      location = { lat: row.rider_latitude, lng: row.rider_longitude };
+      lastUpdated = row.rider_updated_at;
       isLive = false;
     }
 
@@ -417,12 +318,12 @@ const getRiderLocationForOrder = async (req, res) => {
       hasRider: true,
       location,
       lastUpdated,
-      isLive, // true if from Redis (within last 3 mins)
+      isLive,
       rider: {
-        name: order.riderId.name,
-        phone: order.riderId.phone,
-        vehicle: order.riderId.vehicle_type
-      }
+        name: row.rider_name,
+        phone: row.rider_phone,
+        vehicle: row.rider_vehicle_type,
+      },
     });
   } catch (err) {
     console.error("Rider location fetch error:", err);
@@ -430,22 +331,23 @@ const getRiderLocationForOrder = async (req, res) => {
   }
 };
 
-function escapeRegex(text) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+function escapeLike(text) {
+  return text.replace(/[%_\\]/g, "\\$&");
 }
 
 const searchSuggestions = async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
-    const selectedLocation = req.query.location || req.cookies.selectedLocation || req.user?.location || "hyderabad";
+    const selectedLocation =
+      req.query.location ||
+      req.cookies.selectedLocation ||
+      req.user?.location ||
+      "hyderabad";
+
     if (!q) return res.json([]);
-    // Filter by location to show relevant products
-    const docs = await Product.find({ 
-      name: new RegExp("^" + escapeRegex(q), "i"),
-      location: selectedLocation,
-      status: { $ne: "stopped" }
-    }).limit(5).select("name -_id");
-    res.json(docs.map(d => d.name));
+
+    const suggestions = await mainRepository.getSearchSuggestions(`${escapeLike(q)}%`, selectedLocation);
+    res.json(suggestions);
   } catch (err) {
     res.status(500).json({ error: "Failed" });
   }
@@ -453,16 +355,23 @@ const searchSuggestions = async (req, res) => {
 
 const handleSearchPost = async (req, res) => {
   const { searchQuery } = req.body;
-  const selectedLocation = req.cookies.selectedLocation || req.user?.location || "hyderabad";
-  if (!searchQuery?.trim()) return res.json({ success: false, error: "Empty query" });
+  const selectedLocation =
+    req.cookies.selectedLocation || req.user?.location || "hyderabad";
+
+  if (!searchQuery?.trim()) {
+    return res.json({ success: false, error: "Empty query" });
+  }
+
   try {
-    //  Filter by location
-    const results = await Product.find({ 
-      name: new RegExp(escapeRegex(searchQuery.trim()), "i"),
-      location: selectedLocation,
-      status: { $ne: "stopped" }
+    const products = await mainRepository.searchProductsExact(`%${escapeLike(searchQuery.trim())}%`, selectedLocation);
+
+    return res.json({
+      success: true,
+      query: searchQuery,
+      products: products,
+      selectedCategory: "",
+      selectedSort: "",
     });
-    return res.json({ success: true, query: searchQuery, products: results, selectedCategory: "", selectedSort: "" });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
@@ -470,21 +379,20 @@ const handleSearchPost = async (req, res) => {
 
 const handleSearchGet = async (req, res) => {
   const { searchQuery = "", category, sort, page = 1, limit = 20 } = req.query;
-  const selectedLocation = req.query.location || req.cookies.selectedLocation || req.user?.location || "hyderabad";
+  const selectedLocation =
+    req.query.location ||
+    req.cookies.selectedLocation ||
+    req.user?.location ||
+    "hyderabad";
+
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
-  const skip = (pageNum - 1) * limitNum;
-
-  // Include location and status filters + page-wise caching strategy
-  // Cache first 5 pages of search results (most-used pages)
-  // Direct DB for pages > 5 (less common, save memory)
-  
-  // Build normalized cache key
-  const normalizedQuery = searchQuery.trim().toLowerCase().replace(/\s+/g, "-");
+  const offset = (pageNum - 1) * limitNum;
   const normalizedSort = sort || "default";
+
+  const normalizedQuery = searchQuery.trim().toLowerCase().replace(/\s+/g, "-");
   const cacheKey = `search:${selectedLocation}:${normalizedQuery}:${category || "all"}:${normalizedSort}:page:${pageNum}:${limitNum}`;
-  
-  // Check cache for pages 1-5
+
   const shouldCache = pageNum <= 5;
   if (shouldCache) {
     const cached = await getCache(cacheKey);
@@ -494,34 +402,36 @@ const handleSearchGet = async (req, res) => {
     }
   }
 
-  let query = { 
-    name: new RegExp("^" + escapeRegex(searchQuery.trim()), "i"),
-    location: selectedLocation,
-    status: { $ne: "stopped" }
-  };
-  if (category && category !== "All Products") query.category = category;
+  const params = [`%${escapeLike(searchQuery.trim())}%`, selectedLocation];
+  let whereClause = "WHERE name ILIKE $1 AND location = $2 AND status != 'stopped'";
+  let paramIndex = 3;
 
-  let sortOption = {};
-  if (normalizedSort === "low-high") sortOption.price = 1;
-  else if (normalizedSort === "high-low") sortOption.price = -1;
-  else if (normalizedSort === "newest") sortOption.createdAt = -1;
+  if (category && category !== "All Products") {
+    whereClause += ` AND category = $${paramIndex++}`;
+    params.push(category);
+  }
+
+  let orderBy = "";
+  if (normalizedSort === "low-high") orderBy = "ORDER BY price ASC";
+  else if (normalizedSort === "high-low") orderBy = "ORDER BY price DESC";
+  else if (normalizedSort === "newest") orderBy = "ORDER BY created_at DESC";
 
   try {
-    // Get one extra to determine hasNextPage
-    const products = await Product.find(query).sort(sortOption).skip(skip).limit(limitNum + 1);
-    const hasNextPage = products.length > limitNum;
-    const paginatedProducts = hasNextPage ? products.slice(0, limitNum) : products;
+    const dataParams = [...params, limitNum + 1, offset];
+    const rawProducts = await mainRepository.fetchProducts(whereClause, orderBy, dataParams, paramIndex);
+
+    const hasNextPage = rawProducts.length > limitNum;
+    const products = hasNextPage ? rawProducts.slice(0, limitNum) : rawProducts;
 
     const response = {
       success: true,
       query: searchQuery,
-      products: paginatedProducts,
+      products,
       selectedCategory: category || "",
       selectedSort: sort || "",
-      pagination: { currentPage: pageNum, limit: limitNum, hasNextPage }
+      pagination: { currentPage: pageNum, limit: limitNum, hasNextPage },
     };
 
-    // Cache pages 1-5 for 3 minutes (180 seconds)
     if (shouldCache) {
       await setCache(cacheKey, response, 180);
       console.log(`💾 Cached: ${cacheKey} (3 min TTL)`);
@@ -535,6 +445,16 @@ const handleSearchGet = async (req, res) => {
 };
 
 module.exports = {
-  setLocation, renderHome, login, signup, logout, trackOrders, cancelOrder,
-  trackSingleOrder, getRiderLocationForOrder, searchSuggestions, handleSearchPost, handleSearchGet
+  setLocation,
+  renderHome,
+  login,
+  signup,
+  logout,
+  trackOrders,
+  cancelOrder,
+  trackSingleOrder,
+  getRiderLocationForOrder,
+  searchSuggestions,
+  handleSearchPost,
+  handleSearchGet,
 };

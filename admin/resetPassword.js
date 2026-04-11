@@ -32,7 +32,6 @@ const resetPassword = async () => {
         // Connect to database
         console.log('\n🔌 Connecting to database...');
         await mongoose.connect(process.env.MONGO_DB_URI);
-        console.log('✅ Connected to MongoDB\n');
 
         // Get role
         console.log('Available roles:');
@@ -53,21 +52,21 @@ const resetPassword = async () => {
         const role = roleLookup[roleInput.toLowerCase().trim()];
         
         if (!role) {
-            console.error('❌ Invalid role. Enter 1/2/3 or user/seller/rider');
+            console.error(' Invalid role. Enter 1/2/3 or user/seller/rider');
             process.exit(1);
         }
 
         // Get email
         const email = await question('Enter email address: ');
         if (!email || !email.includes('@')) {
-            console.error('❌ Invalid email address');
+            
             process.exit(1);
         }
 
         // Get new password
         const newPassword = await question('Enter new password: ');
         if (!newPassword || newPassword.length < 6) {
-            console.error('❌ Password must be at least 6 characters');
+          
             process.exit(1);
         }
 
@@ -78,16 +77,16 @@ const resetPassword = async () => {
         else if (role === 'rider') Model = Rider;
 
         // Find user
-        console.log(`\n🔍 Looking for ${role} with email: ${email}...`);
+        console.log(`\n Looking for ${role} with email: ${email}...`);
         const user = await Model.findOne({ email });
         
         if (!user) {
-            console.error(`❌ No ${role} found with email: ${email}`);
+            console.error(` No ${role} found with email: ${email}`);
             process.exit(1);
         }
 
-        console.log(`✅ Found ${role}: ${user.name || user.username || 'N/A'}`);
-        console.log(`📧 Current Email: ${user.email}\n`);
+        console.log(`Found ${role}: ${user.name || user.username || 'N/A'}`);
+        console.log(`Current Email: ${user.email}\n`);
         
         // Ask if want to change email
         const changeEmail = await question('Do you want to change the email address? (yes/no): ');
@@ -96,31 +95,31 @@ const resetPassword = async () => {
         if (changeEmail.toLowerCase() === 'yes') {
             newEmail = await question('Enter new email address: ');
             if (!newEmail || !newEmail.includes('@')) {
-                console.error('❌ Invalid email address');
+                console.error(' Invalid email address');
                 process.exit(1);
             }
             
             // Check if new email already exists
             const existingUser = await Model.findOne({ email: newEmail });
             if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-                console.error(`❌ Email ${newEmail} is already in use by another ${role}`);
+                console.error(`Email ${newEmail} is already in use by another ${role}`);
                 process.exit(1);
             }
         }
         
         // Confirm
-        let confirmMessage = `\n⚠️  Are you sure you want to reset password for ${email}?`;
+        let confirmMessage = `\n  Are you sure you want to reset password for ${email}?`;
         if (newEmail) {
-            confirmMessage = `\n⚠️  Are you sure you want to:\n   - Reset password for ${email}\n   - Change email to ${newEmail}`;
+            confirmMessage = `\n  Are you sure you want to:\n   - Reset password for ${email}\n   - Change email to ${newEmail}`;
         }
         const confirm = await question(`${confirmMessage}\n(yes/no): `);
         if (confirm.toLowerCase() !== 'yes') {
-            console.log('❌ Operation cancelled');
+            console.log(' Operation cancelled');
             process.exit(0);
         }
 
         // Hash new password
-        console.log('\n🔐 Hashing new password...');
+        console.log('\nHashing new password...');
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         // Update directly to bypass pre-save hooks (which would double-hash)
@@ -134,22 +133,22 @@ const resetPassword = async () => {
             { $set: updateData }
         );
 
-        console.log('✅ Update successful!\n');
-        console.log('📧 Email:', newEmail || email);
-        console.log('🔑 New Password:', newPassword);
-        console.log('👤 Role:', role);
+        console.log(' Update successful!\n');
+        console.log(' Email:', newEmail || email);
+        console.log(' New Password:', newPassword);
+        console.log(' Role:', role);
         if (newEmail) {
-            console.log('\n✉️  Email was changed from:', email);
+            console.log('\n  Email was changed from:', email);
             console.log('                         to:', newEmail);
         }
-        console.log('\n⚠️  Please save these credentials securely and delete this terminal output.\n');
+        console.log('\n  Please save these credentials securely and delete this terminal output.\n');
 
     } catch (error) {
-        console.error('❌ Error:', error.message);
+        console.error(' Error:', error.message);
     } finally {
         rl.close();
         await mongoose.connection.close();
-        console.log('🔌 Database connection closed');
+        console.log(' Database connection closed');
         process.exit(0);
     }
 };
